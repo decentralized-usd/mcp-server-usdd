@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./build",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  },
+  "include": [
+    "src/index.ts",
+    "src/server/**/*.ts",
+    "src/core/chains.ts",
+    "src/core/abis.ts",
+    "src/core/tools.ts",
+    "src/core/resources.ts",
+    "src/core/prompts.ts",
+    "src/core/services/clients.ts",
+    "src/core/services/wallet.ts",
+    "src/core/services/utils.ts",
+    "src/core/services/global.ts",
+    "src/core/services/contracts.ts",
+    "src/core/services/tokens.ts",
+    "src/core/services/protocol.ts",
+    "src/core/services/vault.ts",
+    "src/core/services/psm.ts",
+    "src/core/services/savings.ts",
+    "src/core/services/index.ts"
+  ],
+  "exclude": ["node_modules", "build", "tests"]
+}

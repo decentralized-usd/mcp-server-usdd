@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mcp-server-usdd": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["tsx", "@usdd/mcp-server-usdd"],
+      "env": {
+        "TRONGRID_API_KEY": "SET_VIA_SYSTEM_ENV"
+      }
+    }
+  }
+}

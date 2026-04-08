@@ -112,17 +112,6 @@ export function registerUsddTools(server: McpServer) {
     }
   });
 
-  server.registerTool("get_vault_price", {
-    description: "Read the current on-chain oracle price for a supported vault collateral type and return both raw and formatted values.",
-    inputSchema: { ilk: z.string().describe("Collateral type like TRX-A, USDT-A, SA001-A"), network: networkField },
-  }, async ({ ilk, network = "tron" }) => {
-    try {
-      return asText(await services.getVaultPrice(network as NetworkKey, ilk));
-    } catch (error) {
-      return asError(error);
-    }
-  });
-
   server.registerTool("get_psm_status", {
     description: "Inspect PSM fees and enablement state.",
     inputSchema: { market: z.string().describe("PSM market like PSM-USDT"), network: networkField },

@@ -169,7 +169,6 @@ Add to .cursor/mcp.json:
 | `get_supported_networks` | List supported networks | No |
 | `get_protocol_overview` | Show configured protocol addresses, ilks, PSMs, and ceilings | No |
 | `get_supported_ilks` | List configured collateral types and PSM joins | No |
-| `get_vault_price` | Read the current on-chain oracle price for a supported vault collateral type, with raw and formatted values | No |
 | `get_token_balance` | Read ERC20/TRC20 balance | No |
 | `check_allowance` | Read ERC20/TRC20 allowance and compare against an optional amount | No |
 | `approve_token` | Approve token allowance | Yes |

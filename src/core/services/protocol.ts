@@ -4,13 +4,6 @@ import { readContract } from "./contracts.js";
 import { getConfiguredWallet } from "./wallet.js";
 import { utils } from "./utils.js";
 
-interface HighestPriceResponse {
-  code: number;
-  data?: Record<string, number | string>;
-  message?: string;
-}
-
-const HIGHEST_PRICE_PATH = "/liquid/highestprice";
 
 async function readOraclePriceSnapshot(network: NetworkKey, pip: string) {
   const [peek, peep, pass, hop] = await Promise.all([
@@ -41,64 +34,6 @@ async function readOraclePriceSnapshot(network: NetworkKey, pip: string) {
   };
 }
 
-function inferPriceFeedKey(ilk: string) {
-  const normalized = ilk.trim().toUpperCase();
-  if (normalized.startsWith("TRX-")) return "trx";
-  if (normalized.startsWith("STRX-")) return "strx";
-  if (normalized.startsWith("USDT-") || normalized === "PSM-USDT") return "usdt";
-  if (normalized.startsWith("USDD-") || normalized === "USDD") return "usdd";
-  return null;
-}
-
-async function readHighestPrice(network: NetworkKey, assetKey: string) {
-  const config = getNetworkConfig(network);
-  const endpoint = new URL(HIGHEST_PRICE_PATH, config.serviceApiUrl).toString();
-  let response: Response;
-  try {
-    response = await fetch(endpoint, {
-      headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Price API request failed: ${message}`);
-  }
-
-  if (!response.ok) {
-    throw new Error(`Price API request failed with ${response.status} ${response.statusText}.`);
-  }
-
-  const payload = await response.json() as HighestPriceResponse;
-  if (payload.code !== 0 || !payload.data) {
-    throw new Error(payload.message || "Price API returned an unexpected response.");
-  }
-
-  const rawValue = payload.data[assetKey];
-  if (rawValue === undefined || rawValue === null) {
-    throw new Error(`Price API does not provide an entry for asset key '${assetKey}'.`);
-  }
-
-  const numericValue = typeof rawValue === "number" ? rawValue : Number(rawValue);
-  if (!Number.isFinite(numericValue)) {
-    throw new Error(`Price API returned a non-numeric value for asset key '${assetKey}'.`);
-  }
-
-  const valueRaw = utils.parseUnits(numericValue.toString(), 18);
-  return {
-    sourceType: "http-highestprice",
-    endpoint,
-    assetKey,
-    decimals: 18,
-    current: {
-      valueRaw: valueRaw.toString(),
-      value: utils.formatUnits(valueRaw, 18),
-      valid: true,
-    },
-    next: null,
-    pass: null,
-    hopSeconds: null,
-  };
-}
 
 export async function getProtocolOverview(network: NetworkKey) {
   const config = getNetworkConfig(network);
@@ -163,39 +98,6 @@ export async function getOracleStatus(network: NetworkKey, ilk: string) {
   };
 }
 
-export async function getVaultPrice(network: NetworkKey, ilk: string) {
-  const config = getNetworkConfig(network);
-  const ilkConfig = getIlkConfig(ilk, network);
-  const ilkBytes = utils.toBytes32(ilkConfig.key);
-  const spotter = await readContract({
-    network,
-    address: config.spot,
-    abi: SPOT_ABI,
-    functionName: "ilks",
-    args: [ilkBytes],
-  }) as any;
-
-  const pip = spotter[0] ?? spotter.pip;
-  if (!pip) {
-    throw new Error(`No oracle configured for ${ilkConfig.key} on ${network}.`);
-  }
-
-  const priceFeedKey = ilkConfig.priceFeedKey || inferPriceFeedKey(ilkConfig.key);
-  if (!priceFeedKey) {
-    throw new Error(`No price feed key is configured for ${ilkConfig.key} on ${network}.`);
-  }
-
-  const oracle = await readHighestPrice(network, priceFeedKey);
-  return {
-    network,
-    ilk: ilkConfig.key,
-    kind: ilkConfig.kind,
-    oracle: {
-      address: pip,
-      ...oracle,
-    },
-  };
-}
 
 export async function getPsmStatus(network: NetworkKey, market: string) {
   const psm = getSupportedPsmMarkets(network).find((item) => item.key.toUpperCase() === market.toUpperCase() || item.label.toUpperCase() === market.toUpperCase());

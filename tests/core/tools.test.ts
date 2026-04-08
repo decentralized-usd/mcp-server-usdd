@@ -17,7 +17,6 @@ const servicesMock = vi.hoisted(() => {
     setActiveWallet: vi.fn(),
     getProtocolOverview: vi.fn(),
     getOracleStatus: vi.fn(),
-    getVaultPrice: vi.fn(),
     getPsmStatus: vi.fn(),
     getUserVaultIds: vi.fn(),
     getProxyAddress: vi.fn(),
@@ -88,7 +87,6 @@ describe("registerUsddTools", () => {
       "get_protocol_overview",
       "get_supported_ilks",
       "get_oracle_status",
-      "get_vault_price",
       "get_psm_status",
       "get_user_vaults",
       "get_vault_summary",
@@ -174,7 +172,6 @@ describe("registerUsddTools", () => {
 
   it("queries oracle, psm, savings, vault summary, and risk analysis", async () => {
     servicesMock.getOracleStatus.mockResolvedValue({ ilk: "TRX-A" });
-    servicesMock.getVaultPrice.mockResolvedValue({ ilk: "TRX-A", oracle: { current: { value: "1.23" } } });
     servicesMock.getPsmStatus.mockResolvedValue({ market: "PSM-USDT" });
     servicesMock.getSavingsStatus.mockResolvedValue({ supported: true });
     servicesMock.getVaultSummary.mockResolvedValue({ cdpId: "123" });
@@ -182,20 +179,17 @@ describe("registerUsddTools", () => {
     const server = createServer();
 
     const oracle = await runTool(server, "get_oracle_status", { ilk: "TRX-A", network: "tron" });
-    const price = await runTool(server, "get_vault_price", { ilk: "TRX-A", network: "tron" });
     const psm = await runTool(server, "get_psm_status", { market: "PSM-USDT", network: "eth" });
     const savings = await runTool(server, "get_savings_status", { network: "bsc" });
     const summary = await runTool(server, "get_vault_summary", { cdpId: "123", network: "tron" });
     const risk = await runTool(server, "analyze_vault_risk", { cdpId: "123", network: "tron" });
 
     expect(servicesMock.getOracleStatus).toHaveBeenCalledWith("tron", "TRX-A");
-    expect(servicesMock.getVaultPrice).toHaveBeenCalledWith("tron", "TRX-A");
     expect(servicesMock.getPsmStatus).toHaveBeenCalledWith("eth", "PSM-USDT");
     expect(servicesMock.getSavingsStatus).toHaveBeenCalledWith("bsc");
     expect(servicesMock.getVaultSummary).toHaveBeenCalledWith("tron", 123n);
     expect(servicesMock.analyzeVaultRisk).toHaveBeenCalledWith("tron", 123n);
     expect(oracle.json.ilk).toBe("TRX-A");
-    expect(price.json.oracle.current.value).toBe("1.23");
     expect(psm.json.market).toBe("PSM-USDT");
     expect(savings.json.supported).toBe(true);
     expect(summary.json.cdpId).toBe("123");

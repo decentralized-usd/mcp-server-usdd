@@ -37,11 +37,25 @@ async function readOraclePriceSnapshot(network: NetworkKey, pip: string) {
 
 export async function getProtocolOverview(network: NetworkKey) {
   const config = getNetworkConfig(network);
-  const [vatLine, protocolDebt, dogHole] = await Promise.all([
+  const ilkList = getSupportedIlks(network);
+
+  const [vatLine, protocolDebt, dogHole, ...ilkResults] = await Promise.all([
     readContract({ network, address: config.vat, abi: VAT_ABI, functionName: "Line" }),
     readContract({ network, address: config.vat, abi: VAT_ABI, functionName: "debt" }),
     readContract({ network, address: config.dog, abi: DOG_ABI, functionName: "Hole" }),
+    ...ilkList.map((ilk) =>
+      readContract({ network, address: config.vat, abi: VAT_ABI, functionName: "ilks", args: [utils.toBytes32(ilk.key)] })
+    ),
   ]);
+
+  const ilksWithDust = ilkList.map((ilk, i) => {
+    const ilkData = ilkResults[i] as any;
+    const dust = BigInt((ilkData[4] ?? ilkData.dust ?? 0).toString());
+    return {
+      ...ilk,
+      dustUSDD: utils.formatUnits(dust / utils.RAY, 18),
+    };
+  });
 
   return {
     network,
@@ -63,7 +77,7 @@ export async function getProtocolOverview(network: NetworkKey) {
       totalDebtUSDD: utils.formatUnits(BigInt(protocolDebt.toString()) / utils.RAY, 18),
       liquidationCapacityUSDD: utils.formatUnits(BigInt(dogHole.toString()) / utils.RAY, 18),
     },
-    ilks: getSupportedIlks(network),
+    ilks: ilksWithDust,
     psmMarkets: getSupportedPsmMarkets(network),
   };
 }

@@ -115,7 +115,7 @@ Amount: ${amount}
   }));
 
   server.registerPrompt("use_savings", {
-    description: "Inspect and use DSR/sUSDD on supported networks.",
+    description: "Inspect and use USDD Savings on supported networks.",
     argsSchema: {
       network: promptNetworkField,
       action: z.enum(["deposit", "withdraw", "inspect"]),
@@ -132,7 +132,7 @@ Network: ${network}
 Action: ${action}
 Amount: ${amount || ""}
 
-1. Call \`get_savings_status\` first and summarize whether savings is supported plus the current DSR/sUSDD metrics.
+1. Call \`get_savings_status\` first and summarize whether savings is supported plus the current USDD Savings metrics.
 2. If action is \`deposit\`, call \`deposit_savings\` with amount='${amount || ""}'.
 3. If action is \`withdraw\`, call \`withdraw_savings\` with amount='${amount || ""}'.
 4. After a write, call \`get_savings_status\` again and report the updated wallet shares and totals.`,

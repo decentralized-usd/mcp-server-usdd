@@ -6,7 +6,7 @@
 ![MCP](https://img.shields.io/badge/MCP-1.22.0+-blue)
 ![USDD](https://img.shields.io/badge/Protocol-USDD-green)
 
-An MCP server for the **USDD protocol** across **TRON, Ethereum, and BNB Smart Chain**. The current version focuses on three core surfaces: **Vault/CDP**, **PSM**, and **DSR/sUSDD**.
+An MCP server for the **USDD protocol** across **TRON, Ethereum, and BNB Smart Chain**. The current version focuses on three core surfaces: **Vault/CDP**, **PSM**, and **USDD Savings**.
 
 ## Scope
 
@@ -14,7 +14,7 @@ Current implementation focuses on:
 
 - Vault lifecycle: open, deposit collateral, mint USDD, repay, withdraw, close
 - PSM lifecycle: inspect fees, swap into USDD, swap out of USDD
-- Savings lifecycle: inspect `DSR/sUSDD`, deposit, withdraw
+- Savings lifecycle: inspect USDD Savings, deposit, withdraw
 - Risk and monitoring for vaults: summaries, oracle status, collateral buffers
 - Token preflight checks: balances, allowances, approvals
 
@@ -23,7 +23,7 @@ Current implementation focuses on:
 | Network | Key | Notes |
 |---|---|---|
 | TRON | `tron` | TRON-native vault and PSM support |
-| Ethereum | `eth` | Vault, PSM, `sUSDD`, `DSR` |
+| Ethereum | `eth` | Vault, PSM, USDD Savings |
 | BNB Smart Chain | `bsc` | Mirrors ETH deployment structure |
 
 ## Prerequisites
@@ -196,11 +196,11 @@ Add to .cursor/mcp.json:
 | `psm_swap_to_usdd` | Swap gem into USDD | Yes |
 | `psm_swap_from_usdd` | Swap USDD into gem | Yes |
 
-### DSR
+### USDD Savings
 
 | Tool | Description | Write? |
 |---|---|---|
-| `get_savings_status` | Show `sUSDD` / `DSR` metrics | No |
+| `get_savings_status` | Show USDD Savings metrics | No |
 | `deposit_savings` | Deposit USDD into `sUSDD` | Yes |
 | `withdraw_savings` | Withdraw USDD from `sUSDD` | Yes |
 
@@ -211,7 +211,7 @@ Add to .cursor/mcp.json:
 | `open_usdd_vault` | Open a vault and verify post-trade risk |
 | `manage_vault_lifecycle` | Run full vault lifecycle flows |
 | `use_psm` | Use PSM with fee checks |
-| `use_savings` | Use `DSR/sUSDD` with inspection and verification |
+| `use_savings` | Use USDD Savings with inspection and verification |
 | `review_vault_risk` | Explain risk for a vault |
 | `repay_and_close_vault` | Repay and close with verification |
 
@@ -248,7 +248,7 @@ mcp-server-usdd/
 - Vault writes assume the configured wallet can sign on the target chain.
 - ERC20/TRC20 flows often require `approve_token` first.
 - TRON, ETH, and BSC deployments have similar USDD protocol structure but different addresses and token decimals.
-- This version intentionally excludes migration and auction actions so we can iterate the Vault + PSM + DSR core first.
+- This version intentionally excludes migration and auction actions so we can iterate the Vault + PSM + USDD Savings core first.
 
 ## Security Considerations
 
@@ -273,7 +273,7 @@ mcp-server-usdd/
 - "Swap 5,000 USDD back to USDC on BSC" -> AI calls `get_psm_status`, then executes `psm_swap_from_usdd` and reminds the user to re-check balances.
 - "What is my USDD balance on Tron?" -> AI calls `get_protocol_overview` to identify the USDD token address, then calls `get_token_balance`.
 - "Do I have enough allowance for the USDT PSM?" -> AI calls `check_allowance` with the token and PSM spender, then suggests `approve_token` only if needed.
-- "What is the current DSR / sUSDD status on Ethereum?" -> AI calls `get_savings_status` and summarizes `chi`, `dsr`, total assets, and wallet shares.
+- "What is the current USDD Savings status on Ethereum?" -> AI calls `get_savings_status` and summarizes total assets, savings rate, and wallet shares.
 - "Deposit 2,000 USDD into sUSDD" -> AI uses `use_savings`: checks savings status, calls `deposit_savings`, then re-checks savings metrics.
 - "Withdraw 500 USDD from sUSDD on BSC" -> AI calls `get_savings_status`, executes `withdraw_savings`, and confirms the updated share balance.
 

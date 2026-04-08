@@ -159,7 +159,7 @@ export function registerUsddTools(server: McpServer) {
   });
 
   server.registerTool("get_savings_status", {
-    description: "Inspect DSR/sUSDD metrics where supported.",
+    description: "Inspect USDD Savings metrics where supported.",
     inputSchema: { network: networkField },
   }, async ({ network = "tron" }) => {
     try {

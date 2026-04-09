@@ -111,7 +111,7 @@ Add the following config to:
     "mcp-server-usdd": {
       "type": "stdio",
       "command": "npx",
-      "args": ["tsx", "@usdd/mcp-server-usdd"],
+      "args": ["-y", "@usdd/mcp-server-usdd"],
       "env": {
         "TRONGRID_API_KEY": "your_trongrid_api_key"
       }
@@ -130,7 +130,7 @@ Create `.mcp.json` in the project root directory:
     "mcp-server-usdd": {
       "type": "stdio",
       "command": "npx",
-      "args": ["tsx", "@usdd/mcp-server-usdd"],
+      "args": ["-y", "@usdd/mcp-server-usdd"],
       "env": {
         "TRONGRID_API_KEY": "your_trongrid_api_key"
       }
@@ -150,7 +150,7 @@ Add to .cursor/mcp.json:
     "mcp-server-usdd": {
       "type": "stdio",
       "command": "npx",
-      "args": ["tsx", "@usdd/mcp-server-usdd"],
+      "args": ["-y", "@usdd/mcp-server-usdd"],
       "env": {
         "TRONGRID_API_KEY": "your_trongrid_api_key"
       }

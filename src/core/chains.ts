@@ -1,6 +1,4 @@
 export type NetworkKey = "tron" | "eth" | "bsc" | "tron_nile" | "eth_sepolia" | "bsc_testnet";
-type PublicNetworkKey = "tron" | "eth" | "bsc";
-type InternalTestNetworkKey = "tron_nile" | "eth_sepolia" | "bsc_testnet";
 
 export type ChainKind = "tron" | "evm";
 
@@ -61,8 +59,6 @@ const ethSepoliaRpc = process.env.ETH_SEPOLIA_RPC_URL || "https://ethereum-sepol
 const bscTestnetRpc = process.env.BSC_TESTNET_RPC_URL || "https://bsc-testnet-rpc.publicnode.com";
 const productionApiUrl = process.env.USDD_API_URL || "https://app-api.usdd.io";
 const ZERO_EVM_ADDRESS = "0x0000000000000000000000000000000000000000";
-const PUBLIC_NETWORK_KEYS: PublicNetworkKey[] = ["tron", "eth", "bsc"];
-const INTERNAL_TEST_NETWORK_KEYS: InternalTestNetworkKey[] = ["tron_nile", "eth_sepolia", "bsc_testnet"];
 
 export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
   tron: {
@@ -253,25 +249,11 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
 
 
 export function getSupportedNetworks(): NetworkKey[] {
-  const testnetsEnabled = /^(1|true|yes)$/i.test(process.env.USDD_ENABLE_TESTNETS || "");
-  if (testnetsEnabled) {
-    return [...PUBLIC_NETWORK_KEYS, ...INTERNAL_TEST_NETWORK_KEYS];
-  }
-  return [...PUBLIC_NETWORK_KEYS];
-}
-
-export function getSupportedNetworkConfigs(): Record<string, NetworkConfig> {
-  const supported = new Set(getSupportedNetworks());
-  return Object.fromEntries(
-    Object.entries(NETWORKS).filter(([key]) => supported.has(key as NetworkKey)),
-  );
+  return Object.keys(NETWORKS) as NetworkKey[];
 }
 
 export function getNetworkConfig(network: string = "tron"): NetworkConfig {
   const key = network.toLowerCase() as NetworkKey;
-  if (!getSupportedNetworks().includes(key)) {
-    throw new Error(`Unsupported network: ${network}. Supported: ${getSupportedNetworks().join(", ")}`);
-  }
   const config = NETWORKS[key];
   if (!config) {
     throw new Error(`Unsupported network: ${network}. Supported: ${getSupportedNetworks().join(", ")}`);

@@ -10,8 +10,8 @@ import {
 } from "../../src/core/chains.js";
 
 describe("chains", () => {
-  it("exposes the public mainnets", () => {
-    expect(getSupportedNetworks()).toEqual(["tron", "eth", "bsc"]);
+  it("exposes mainnets and internal testnets", () => {
+    expect(getSupportedNetworks()).toEqual(["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"]);
   });
 
   it("returns the expected mainnet config", () => {
@@ -21,29 +21,14 @@ describe("chains", () => {
   });
 
   it("throws for unsupported networks", () => {
-    delete process.env.USDD_ENABLE_TESTNETS;
     expect(() => getNetworkConfig("sepolia")).toThrow("Unsupported network");
-    expect(() => getNetworkConfig("eth_sepolia")).toThrow("Unsupported network");
     expect(() => getNetworkConfig("unknown")).toThrow("Unsupported network");
   });
 
-  it("can expose internal testnets when enabled", () => {
-    const previous = process.env.USDD_ENABLE_TESTNETS;
-    process.env.USDD_ENABLE_TESTNETS = "true";
-    try {
-      expect(getSupportedNetworks()).toContain("tron_nile");
-      expect(getSupportedNetworks()).toContain("eth_sepolia");
-      expect(getSupportedNetworks()).toContain("bsc_testnet");
-      expect(getNetworkConfig("tron_nile").label).toContain("Nile");
-      expect(getNetworkConfig("eth_sepolia").chainId).toBe(11155111);
-      expect(getNetworkConfig("bsc_testnet").chainId).toBe(97);
-    } finally {
-      if (previous === undefined) {
-        delete process.env.USDD_ENABLE_TESTNETS;
-      } else {
-        process.env.USDD_ENABLE_TESTNETS = previous;
-      }
-    }
+  it("returns expected testnet config", () => {
+    expect(getNetworkConfig("tron_nile").label).toContain("Nile");
+    expect(getNetworkConfig("eth_sepolia").chainId).toBe(11155111);
+    expect(getNetworkConfig("bsc_testnet").chainId).toBe(97);
   });
 
   it("resolves ilks case-insensitively", () => {

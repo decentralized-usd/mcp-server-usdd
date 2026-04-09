@@ -21,8 +21,29 @@ describe("chains", () => {
   });
 
   it("throws for unsupported networks", () => {
+    delete process.env.USDD_ENABLE_TESTNETS;
     expect(() => getNetworkConfig("sepolia")).toThrow("Unsupported network");
+    expect(() => getNetworkConfig("eth_sepolia")).toThrow("Unsupported network");
     expect(() => getNetworkConfig("unknown")).toThrow("Unsupported network");
+  });
+
+  it("can expose internal testnets when enabled", () => {
+    const previous = process.env.USDD_ENABLE_TESTNETS;
+    process.env.USDD_ENABLE_TESTNETS = "true";
+    try {
+      expect(getSupportedNetworks()).toContain("tron_nile");
+      expect(getSupportedNetworks()).toContain("eth_sepolia");
+      expect(getSupportedNetworks()).toContain("bsc_testnet");
+      expect(getNetworkConfig("tron_nile").label).toContain("Nile");
+      expect(getNetworkConfig("eth_sepolia").chainId).toBe(11155111);
+      expect(getNetworkConfig("bsc_testnet").chainId).toBe(97);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.USDD_ENABLE_TESTNETS;
+      } else {
+        process.env.USDD_ENABLE_TESTNETS = previous;
+      }
+    }
   });
 
   it("resolves ilks case-insensitively", () => {

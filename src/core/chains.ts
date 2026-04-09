@@ -1,4 +1,6 @@
-export type NetworkKey = "tron" | "eth" | "bsc";
+export type NetworkKey = "tron" | "eth" | "bsc" | "tron_nile" | "eth_sepolia" | "bsc_testnet";
+type PublicNetworkKey = "tron" | "eth" | "bsc";
+type InternalTestNetworkKey = "tron_nile" | "eth_sepolia" | "bsc_testnet";
 
 export type ChainKind = "tron" | "evm";
 
@@ -54,7 +56,13 @@ export interface NetworkConfig {
 const tronRpc = process.env.TRON_FULL_NODE || "https://api.trongrid.io";
 const ethRpc = process.env.ETH_RPC_URL || "https://ethereum-rpc.publicnode.com";
 const bscRpc = process.env.BSC_RPC_URL || "https://bsc-rpc.publicnode.com";
+const tronNileRpc = process.env.TRON_NILE_FULL_NODE || "https://nile.trongrid.io";
+const ethSepoliaRpc = process.env.ETH_SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
+const bscTestnetRpc = process.env.BSC_TESTNET_RPC_URL || "https://bsc-testnet-rpc.publicnode.com";
 const productionApiUrl = process.env.USDD_API_URL || "https://app-api.usdd.io";
+const ZERO_EVM_ADDRESS = "0x0000000000000000000000000000000000000000";
+const PUBLIC_NETWORK_KEYS: PublicNetworkKey[] = ["tron", "eth", "bsc"];
+const INTERNAL_TEST_NETWORK_KEYS: InternalTestNetworkKey[] = ["tron_nile", "eth_sepolia", "bsc_testnet"];
 
 export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
   tron: {
@@ -160,15 +168,110 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
       "PSM-USDC": { key: "PSM-USDC", label: "PSM USDC", psm: "0x57f7ef5f22c8db13e4f181fc218478a749d7ec4f", gemJoin: "0x664781ca89a786e66120cd98187d731850516cb3", gem: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
     },
   },
+  tron_nile: {
+    key: "tron_nile",
+    label: "TRON Nile (Internal)",
+    kind: "tron",
+    chainId: 3448148188,
+    rpcUrl: tronNileRpc,
+    explorer: "https://nile.tronscan.org",
+    nativeSymbol: "TRX",
+    serviceApiUrl: productionApiUrl,
+    proxyRegistry: "TFYXC7Sx2UfMmvNeuSpGv2Ss4e8skzkgCS",
+    proxyActions: "TDAeZp2u3Z3aSXL9GTaqg3GQTG5oksNRJ4",
+    cdpManager: "TLsfKsZ15SVMMfyyfvd2WXB1ZiexKavez2",
+    vat: "TDAv6rniTrqjYqA64VVpnJxFfgmveN2LUA",
+    jug: "TAJFAHMuxwVG18G55oXNJkPFuhg2zpPWZ6",
+    dog: "TRUbRBoSBQZGAvN4UiWcxj1EuwicAczkE5",
+    spot: "TBDV5R9ivEndudp16rAW8Yb129Um8wFKsA",
+    usdd: "TYQF9cAeJ3Faq8QXpHxTcFco72DRCQbgFt",
+    usddJoin: "TMhXGZgx1bQwWD2r9ZqS9rjp8QRU5v7R7Y",
+    multicall: "TZHL5DTcqr6r3uugk2fgtZKHwe4Yp2bsQi",
+    ilks: {
+      "TRX-A": { key: "TRX-A", label: "TRX-A", join: "TAnN3k475UhYY7jTEeM11WCw6pqsfMQwxW", gem: "TYsbWxNnyTgsZaTFaue9hqpxkU3Fkco94a", decimals: 6, kind: "native", priceFeedKey: "trx" },
+      "TRX-B": { key: "TRX-B", label: "TRX-B", join: "TND1RyHS7KHp3uo8sfcL66heceEMUBPJp9", gem: "TYsbWxNnyTgsZaTFaue9hqpxkU3Fkco94a", decimals: 6, kind: "native", priceFeedKey: "trx" },
+      "TRX-C": { key: "TRX-C", label: "TRX-C", join: "TE7WfUHoQ46fFzC9Ar3BHrDj4ceJVkzaRS", gem: "TYsbWxNnyTgsZaTFaue9hqpxkU3Fkco94a", decimals: 6, kind: "native", priceFeedKey: "trx" },
+      "STRX-B": { key: "STRX-B", label: "sTRX-B", join: "TBRj4YJGupXbBT6Fj3VGvh7THJxA7DF4KA", gem: "TZ8du1HkatTWDbS6FLZei4dQfjfpSm9mxp", decimals: 18, kind: "erc20", priceFeedKey: "strx" },
+      "USDT-A": { key: "USDT-A", label: "USDT-A", join: "TRGUtFsWsVRBeQ3paBytJgbS7v7nnv8HNP", gem: "TZDnq7egPqzi7H4SXy1ABvwaVRvRTaVfJW", decimals: 6, kind: "erc20", priceFeedKey: "usdt" },
+      "WBTC-A": { key: "WBTC-A", label: "WBTC-A", join: "TBD37jDFSYofEVDeZBtZXdFo37EPC1hdCz", gem: "TH6397cZviHkfrHqXGsGZn8erFbopjQ1U5", decimals: 8, kind: "erc20", priceFeedKey: "wbtc" },
+    },
+    psmMarkets: {
+      "PSM-USDT": { key: "PSM-USDT", label: "PSM USDT", psm: "TEwUGMSAvbmzjxWoV8JWoSqvQm1A3AXs1V", gemJoin: "TBm4W3JpzsQC4z5mk96fLWZbfNKcfJ5Bxy", gem: "TZDnq7egPqzi7H4SXy1ABvwaVRvRTaVfJW", decimals: 6 },
+    },
+  },
+  eth_sepolia: {
+    key: "eth_sepolia",
+    label: "Ethereum Sepolia (Internal)",
+    kind: "evm",
+    chainId: 11155111,
+    rpcUrl: ethSepoliaRpc,
+    explorer: "https://sepolia.etherscan.io",
+    nativeSymbol: "ETH",
+    serviceApiUrl: productionApiUrl,
+    proxyRegistry: "0x9334a91eb8a23bb45c5f42fec4e387d914dd7ef0",
+    proxyActions: "0x8b60aa3b7948c9d056b5bdbb3a8ff31253a30b3b",
+    cdpManager: "0xb6f757bffc522de20d8cc688bc0a59f27e02e13d",
+    vat: ZERO_EVM_ADDRESS,
+    jug: ZERO_EVM_ADDRESS,
+    dog: ZERO_EVM_ADDRESS,
+    spot: ZERO_EVM_ADDRESS,
+    usdd: "0xac645f7a1eb3e552b9f4a63afc30495b2c8fcbf4",
+    usddJoin: "0xcb1c2ed52842dcc2dff2890d199d560fcfe19be3",
+    savings: {
+      susdd: "0xcf37b6b7b36920267990e885311214f2de5421dc",
+      pot: "0xf7dd09b23864f410cb414c2b11ef3112fcd1c47d",
+    },
+    ilks: {},
+    psmMarkets: {},
+  },
+  bsc_testnet: {
+    key: "bsc_testnet",
+    label: "BNB Smart Chain Testnet (Internal)",
+    kind: "evm",
+    chainId: 97,
+    rpcUrl: bscTestnetRpc,
+    explorer: "https://testnet.bscscan.com",
+    nativeSymbol: "BNB",
+    serviceApiUrl: productionApiUrl,
+    proxyRegistry: "0xfbbed7fa2bd12704d669bcee1a97b09accf1025e",
+    proxyActions: "0xa611a3fcbf68dcd3b6b44c2868f66c42117f1a0e",
+    cdpManager: "0xa94f77e6ff4aa8df842cf5234fe0bca102e243d4",
+    vat: ZERO_EVM_ADDRESS,
+    jug: ZERO_EVM_ADDRESS,
+    dog: ZERO_EVM_ADDRESS,
+    spot: ZERO_EVM_ADDRESS,
+    usdd: "0x7977e803b57b8a3c1049cbdebfe664868b32b738",
+    usddJoin: "0x46f5da3c9dd6510c6d0c146cda404857c3e775f6",
+    savings: {
+      susdd: "0x3b0804c4de1dc18b285c0035ff0bf54d84cf5bd7",
+      pot: "0xfe00c7978faace0c4171e82ff748b4da8014d28f",
+    },
+    ilks: {},
+    psmMarkets: {},
+  },
 };
 
 
 export function getSupportedNetworks(): NetworkKey[] {
-  return Object.keys(NETWORKS) as NetworkKey[];
+  const testnetsEnabled = /^(1|true|yes)$/i.test(process.env.USDD_ENABLE_TESTNETS || "");
+  if (testnetsEnabled) {
+    return [...PUBLIC_NETWORK_KEYS, ...INTERNAL_TEST_NETWORK_KEYS];
+  }
+  return [...PUBLIC_NETWORK_KEYS];
+}
+
+export function getSupportedNetworkConfigs(): Record<string, NetworkConfig> {
+  const supported = new Set(getSupportedNetworks());
+  return Object.fromEntries(
+    Object.entries(NETWORKS).filter(([key]) => supported.has(key as NetworkKey)),
+  );
 }
 
 export function getNetworkConfig(network: string = "tron"): NetworkConfig {
   const key = network.toLowerCase() as NetworkKey;
+  if (!getSupportedNetworks().includes(key)) {
+    throw new Error(`Unsupported network: ${network}. Supported: ${getSupportedNetworks().join(", ")}`);
+  }
   const config = NETWORKS[key];
   if (!config) {
     throw new Error(`Unsupported network: ${network}. Supported: ${getSupportedNetworks().join(", ")}`);

@@ -63,11 +63,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/usdd-network/mcp-server-usdd.git"
+    "url": "git+https://github.com/decentralized-usd/mcp-server-usdd.git"
   },
-  "homepage": "https://github.com/usdd-network/mcp-server-usdd#readme",
+  "homepage": "https://github.com/decentralized-usd/mcp-server-usdd#readme",
   "bugs": {
-    "url": "https://github.com/usdd-network/mcp-server-usdd/issues"
+    "url": "https://github.com/decentralized-usd/mcp-server-usdd/issues"
   },
   "license": "MIT"
 }

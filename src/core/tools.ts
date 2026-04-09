@@ -12,7 +12,7 @@ function asError(error: unknown) {
   return { content: [{ type: "text" as const, text: `Error: ${message}` }], isError: true as const };
 }
 
-const networkField = z.enum(["tron", "eth", "bsc"]).optional().describe("Target network. Default: tron");
+const networkField = z.enum(["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"]).optional().describe("Target network. Default: tron");
 const walletTypeField = z.enum(["tron", "evm"]).describe("Wallet family: tron or evm");
 const secretTypeField = z.enum(["private_key", "mnemonic"]).describe("Secret type to import");
 

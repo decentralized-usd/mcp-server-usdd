@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { NETWORKS } from "./chains.js";
+import { getSupportedNetworkConfigs } from "./chains.js";
 import { utils } from "./services/utils.js";
 
 export function registerUsddResources(server: McpServer) {
@@ -14,7 +14,7 @@ export function registerUsddResources(server: McpServer) {
       contents: [{
         uri: "usdd://protocol-info",
         mimeType: "application/json",
-        text: utils.formatJson(NETWORKS),
+        text: utils.formatJson(getSupportedNetworkConfigs()),
       }],
     }),
   );

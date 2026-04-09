@@ -47,6 +47,23 @@ describe("chains", () => {
     expect(getSupportedPsmMarkets("bsc").map((item) => item.key)).toContain("PSM-USDT");
   });
 
+  it("exposes WBTC-A and WBTC-B on TRON", () => {
+    const tronIlks = getSupportedIlks("tron").map((item) => item.key);
+    expect(tronIlks).toContain("WBTC-A");
+    expect(tronIlks).toContain("WBTC-B");
+  });
+
+  it("resolves WBTC ilk config with correct gem and decimals", () => {
+    const wbtcA = getIlkConfig("WBTC-A", "tron");
+    const wbtcB = getIlkConfig("wbtc-b", "tron");
+    expect(wbtcA.gem).toBe("TYhWwKpw43ENFWBTGpzLHh3882f2au7SMi");
+    expect(wbtcA.decimals).toBe(8);
+    expect(wbtcA.kind).toBe("erc20");
+    expect(wbtcB.gem).toBe("TYhWwKpw43ENFWBTGpzLHh3882f2au7SMi");
+    expect(wbtcB.decimals).toBe(8);
+    expect(wbtcB.kind).toBe("erc20");
+  });
+
 
   it("keeps savings only on evm networks", () => {
     expect(NETWORKS.tron.savings).toBeUndefined();

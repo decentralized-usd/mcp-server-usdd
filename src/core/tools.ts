@@ -103,7 +103,7 @@ export function registerUsddTools(server: McpServer) {
 
   server.registerTool("get_oracle_status", {
     description: "Inspect liquidation ratio, penalty, and oracle status for a collateral type.",
-    inputSchema: { ilk: z.string().describe("Collateral type like TRX-A, USDT-A, PSM-USDT"), network: networkField },
+    inputSchema: { ilk: z.string().describe("Collateral type like TRX-A, WBTC-A, USDT-A, PSM-USDT"), network: networkField },
   }, async ({ ilk, network = "tron" }) => {
     try {
       return asText(await services.getOracleStatus(network as NetworkKey, ilk));
@@ -171,7 +171,7 @@ export function registerUsddTools(server: McpServer) {
 
   server.registerTool("open_vault", {
     description: "Open a new vault/CDP via DSProxy.",
-    inputSchema: { ilk: z.string().describe("Collateral type like TRX-A or SA001-A"), network: networkField },
+    inputSchema: { ilk: z.string().describe("Collateral type like TRX-A, WBTC-A, or SA001-A"), network: networkField },
   }, async ({ ilk, network = "tron" }) => {
     try {
       return asText(await services.openVault(network as NetworkKey, ilk));

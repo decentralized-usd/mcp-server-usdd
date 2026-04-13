@@ -190,6 +190,7 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
       "STRX-B": { key: "STRX-B", label: "sTRX-B", join: "TBRj4YJGupXbBT6Fj3VGvh7THJxA7DF4KA", gem: "TZ8du1HkatTWDbS6FLZei4dQfjfpSm9mxp", decimals: 18, kind: "erc20", priceFeedKey: "strx" },
       "USDT-A": { key: "USDT-A", label: "USDT-A", join: "TRGUtFsWsVRBeQ3paBytJgbS7v7nnv8HNP", gem: "TZDnq7egPqzi7H4SXy1ABvwaVRvRTaVfJW", decimals: 6, kind: "erc20", priceFeedKey: "usdt" },
       "WBTC-A": { key: "WBTC-A", label: "WBTC-A", join: "TBD37jDFSYofEVDeZBtZXdFo37EPC1hdCz", gem: "TH6397cZviHkfrHqXGsGZn8erFbopjQ1U5", decimals: 8, kind: "erc20", priceFeedKey: "wbtc" },
+      "WBTC-B": { key: "WBTC-B", label: "WBTC-B", join: "TWH624sRWMjHPUYDwQ9kv4Ax5JjLNdm339", gem: "TH6397cZviHkfrHqXGsGZn8erFbopjQ1U5", decimals: 8, kind: "erc20", priceFeedKey: "wbtc" },
     },
     psmMarkets: {
       "PSM-USDT": { key: "PSM-USDT", label: "PSM USDT", psm: "TEwUGMSAvbmzjxWoV8JWoSqvQm1A3AXs1V", gemJoin: "TBm4W3JpzsQC4z5mk96fLWZbfNKcfJ5Bxy", gem: "TZDnq7egPqzi7H4SXy1ABvwaVRvRTaVfJW", decimals: 6 },

@@ -170,7 +170,7 @@ export function registerUsddTools(server: McpServer) {
   });
 
   server.registerTool("open_vault", {
-    description: "Open a new vault/CDP via DSProxy.",
+    description: "Open a vault/CDP via DSProxy. Idempotent: if a vault for the given ilk already exists, returns the existing CDP id without submitting a transaction.",
     inputSchema: { ilk: z.string().describe("Collateral type like TRX-A, WBTC-A, or SA001-A"), network: networkField },
   }, async ({ ilk, network = "tron" }) => {
     try {
@@ -250,7 +250,7 @@ export function registerUsddTools(server: McpServer) {
   });
 
   server.registerTool("deposit_and_mint", {
-    description: "Deposit collateral and mint USDD. If cdpId is omitted, opens a vault and funds it in one transaction.",
+    description: "Deposit collateral and mint USDD. If cdpId is omitted, reuses an existing vault for the ilk if one exists; otherwise opens a new vault and funds it in one transaction.",
     inputSchema: {
       ilk: z.string(),
       collateralAmount: z.string(),

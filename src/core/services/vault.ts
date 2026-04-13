@@ -179,10 +179,39 @@ export async function analyzeVaultRisk(network: NetworkKey, cdpId: bigint) {
   return { ...summary, warnings };
 }
 
+async function findExistingVaultForIlk(network: NetworkKey, ilkKey: string): Promise<bigint | null> {
+  const config = getNetworkConfig(network);
+  const ids = await getUserVaultIds(network);
+  for (const cdpId of ids) {
+    const ilkRaw = await readContract({
+      network,
+      address: config.cdpManager,
+      abi: CDP_MANAGER_ABI,
+      functionName: "ilks",
+      args: [cdpId],
+    });
+    const decoded = utils.bytes32ToString(String(ilkRaw));
+    if (decoded.toLowerCase() === ilkKey.toLowerCase()) {
+      return cdpId;
+    }
+  }
+  return null;
+}
+
 export async function openVault(network: NetworkKey, ilk: string) {
   const config = getNetworkConfig(network);
   const proxy = await ensureProxy(network);
   const ilkConfig = getIlkConfig(ilk, network);
+
+  const existing = await findExistingVaultForIlk(network, ilkConfig.key);
+  if (existing !== null) {
+    return {
+      cdpId: existing.toString(),
+      reused: true,
+      message: `Vault for ${ilkConfig.key} already exists with CDP id ${existing}. No transaction submitted.`,
+    };
+  }
+
   const result = await executeProxyAction({
     network,
     target: config.proxyActions,
@@ -207,6 +236,24 @@ export async function depositAndMint(params: {
   const draw = utils.parseUnits(params.drawAmount, 18);
 
   if (!params.cdpId) {
+    const existingCdpId = await findExistingVaultForIlk(params.network, ilkConfig.key);
+    if (existingCdpId !== null) {
+      await assertVaultOwnedByCurrentProxy(params.network, existingCdpId);
+      const fn = ilkConfig.kind === "native" ? "lockTRXAndDraw" : "lockGemAndDraw";
+      const args = ilkConfig.kind === "native"
+        ? [config.cdpManager, config.jug, ilkConfig.join, config.usddJoin, existingCdpId, draw]
+        : [config.cdpManager, config.jug, ilkConfig.join, config.usddJoin, existingCdpId, collateral, draw, params.transferFrom ?? true];
+      const result = await executeProxyAction({
+        network: params.network,
+        target: config.proxyActions,
+        targetAbi: DSS_PROXY_ACTIONS_ABI,
+        functionName: fn,
+        args,
+        value: ilkConfig.kind === "native" ? collateral : undefined,
+      });
+      return { ...result, reused: true, message: `Added ${params.collateralAmount} collateral and minted ${params.drawAmount} USDD into existing ${ilkConfig.key} vault ${existingCdpId}.` };
+    }
+
     const fn = ilkConfig.kind === "native" ? "openLockTRXAndDraw" : "openLockGemAndDraw";
     const args = ilkConfig.kind === "native"
       ? [config.cdpManager, config.jug, ilkConfig.join, config.usddJoin, utils.toBytes32(ilkConfig.key), draw]

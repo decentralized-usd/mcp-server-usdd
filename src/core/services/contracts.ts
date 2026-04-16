@@ -101,7 +101,7 @@ export async function getProxyAddress(network: NetworkKey, buildIfMissing = fals
     args: [wallet.address],
   });
 
-  const normalized = typeof existing === "string" ? existing : String(existing);
+  const normalized = utils.normalizeAddress(typeof existing === "string" ? existing : String(existing), network);
   const empty = config.kind === "tron" ? "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb" : "0x0000000000000000000000000000000000000000";
   if (normalized && normalized !== empty && !/^0x0+$/.test(normalized)) return normalized;
 

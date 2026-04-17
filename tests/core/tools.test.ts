@@ -112,7 +112,7 @@ describe("registerUsddTools", () => {
     const server = createServer();
     const result = await runTool(server, "get_supported_networks");
     expect(result.json).toEqual({
-      networks: ["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"],
+      networks: ["tron", "eth", "bsc"],
       default: "tron",
     });
   });

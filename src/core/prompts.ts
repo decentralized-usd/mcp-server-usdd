@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-const promptNetworkField = z.enum(["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"]).optional();
+const promptNetworkField = z.enum(["tron", "eth", "bsc"]).optional();
 
 export function registerUsddPrompts(server: McpServer) {
   server.registerPrompt("open_usdd_vault", {

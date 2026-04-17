@@ -39,7 +39,7 @@ Current implementation focuses on:
 ### Installation
 
 ```bash
-git clone https://github.com/usdd-network/mcp-server-usdd
+git clone https://github.com/decentralized-usd/mcp-server-usdd
 cd mcp-server-usdd
 npm install
 ```

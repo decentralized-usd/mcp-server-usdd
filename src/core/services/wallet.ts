@@ -116,8 +116,11 @@ function saveWalletState(state: WalletState) {
 
 function toAgentNetwork(value: NetworkKey | WalletType | string) {
   if (value === "tron") return "tron";
+  if (value === "tron_nile") return "tron";
   if (value === "eth") return "eip155:1";
+  if (value === "eth_sepolia") return "eip155:11155111";
   if (value === "bsc") return "eip155:56";
+  if (value === "bsc_testnet") return "eip155:97";
   if (value === "evm") return "eip155:1";
   throw new Error(`Unsupported wallet network: ${value}`);
 }

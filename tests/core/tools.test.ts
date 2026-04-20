@@ -111,7 +111,10 @@ describe("registerUsddTools", () => {
   it("returns supported networks", async () => {
     const server = createServer();
     const result = await runTool(server, "get_supported_networks");
-    expect(result.json).toEqual({ networks: ["tron", "eth", "bsc"], default: "tron" });
+    expect(result.json).toEqual({
+      networks: ["tron", "eth", "bsc"],
+      default: "tron",
+    });
   });
 
   it("uses tron as the default network for wallet and protocol reads", async () => {

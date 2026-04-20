@@ -55,6 +55,7 @@ const tronRpc = process.env.TRON_FULL_NODE || "https://api.trongrid.io";
 const ethRpc = process.env.ETH_RPC_URL || "https://ethereum-rpc.publicnode.com";
 const bscRpc = process.env.BSC_RPC_URL || "https://bsc-rpc.publicnode.com";
 const productionApiUrl = process.env.USDD_API_URL || "https://app-api.usdd.io";
+const ZERO_EVM_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
   tron: {
@@ -83,6 +84,8 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
       "TRX-C": { key: "TRX-C", label: "TRX-C", join: "TPUPPLTYLdbW4jxwD5g2T7ystxsR9HL2mt", gem: "TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR", decimals: 6, kind: "native", priceFeedKey: "trx" },
       "USDT-A": { key: "USDT-A", label: "USDT-A", join: "TDUkQbjrXs6xUbxGCLknWwJHxVTdysXBhy", gem: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", decimals: 6, kind: "erc20", priceFeedKey: "usdt" },
       "STRX-A": { key: "STRX-A", label: "sTRX-A", join: "TKha7zcAXZMaaWzoVmUHtvVFqr9GeiChgJ", gem: "TU3kjFuhtEo42tsCBtfYUAZxoqQ4yuSLQ5", decimals: 18, kind: "erc20", priceFeedKey: "strx" },
+      "WBTC-A": { key: "WBTC-A", label: "WBTC-A", join: "TDea6uDwDgxkUwyEefhqMPij6NzRiPrVV1", gem: "TYhWwKpw43ENFWBTGpzLHh3882f2au7SMi", decimals: 8, kind: "erc20", priceFeedKey: "wbtc" },
+      "WBTC-B": { key: "WBTC-B", label: "WBTC-B", join: "TRoqYfXY7ZLZcjeiTQYNu2vDhJPeJYNf1w", gem: "TYhWwKpw43ENFWBTGpzLHh3882f2au7SMi", decimals: 8, kind: "erc20", priceFeedKey: "wbtc" },
     },
     psmMarkets: {
       "PSM-USDT": { key: "PSM-USDT", label: "PSM USDT", psm: "TBXW4hS5KYjjbJXDpnrPf4zhkLwrpUjbyz", gemJoin: "TSUYvQ5tdd3DijCD1uGunGLpftHuSZ12sQ", gem: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", decimals: 6 },

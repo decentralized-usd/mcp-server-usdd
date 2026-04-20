@@ -114,3 +114,7 @@ build
 /test-results/
 /blob-report/
 /tests/**-snapshots/**-darwin.png
+
+# claude
+.claude/*
+docs/*

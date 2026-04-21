@@ -3,6 +3,8 @@ import { z } from "zod";
 import { getSupportedNetworks, getSupportedIlks, getSupportedPsmMarkets, type NetworkKey } from "./chains.js";
 import * as services from "./services/index.js";
 
+type NetworkFamily = "tron" | "eth" | "bsc";
+
 function asText(data: unknown) {
   return { content: [{ type: "text" as const, text: services.utils.formatJson(data) }] };
 }
@@ -13,6 +15,7 @@ function asError(error: unknown) {
 }
 
 const networkField = z.enum(["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"]).optional().describe("Target network. Default: tron");
+const networkFamilyField = z.enum(["tron", "eth", "bsc"]).optional().describe("Network family. Use with aliases like mainnet.");
 const walletTypeField = z.enum(["tron", "evm"]).describe("Wallet family: tron or evm");
 const secretTypeField = z.enum(["private_key", "mnemonic"]).describe("Secret type to import");
 const walletModeField = z.enum(["browser", "agent"]).describe("Wallet signing mode");
@@ -70,26 +73,44 @@ export function registerUsddTools(server: McpServer) {
   });
 
   server.registerTool("set_network", {
-    description: "Set global default network. Supports chain-specific aliases (tron_mainnet, tron_nile, eth_mainnet, eth_sepolia, bsc_mainnet, bsc_testnet) or explicit network keys.",
+    description: "Set default network for one family. Supports aliases (tron_mainnet, tron_nile, eth_mainnet, eth_sepolia, bsc_mainnet, bsc_testnet) or explicit network keys.",
     inputSchema: {
       network: z.string().min(1).describe("Network alias or key, e.g. tron_mainnet, tron_nile, eth_mainnet, bsc_testnet, tron, eth_sepolia"),
+      family: networkFamilyField,
     },
-  }, async ({ network }) => {
+  }, async ({ network, family }) => {
     try {
-      services.setGlobalNetwork(network);
-      const active = services.getGlobalNetwork();
-      return asText(services.getNetworkProfile(active));
+      const active = services.setGlobalNetwork(network, family as NetworkFamily | undefined);
+      const defaults = services.getGlobalNetworks();
+      return asText({
+        ...services.getNetworkProfile(active),
+        defaults,
+        defaultAliases: {
+          tron: services.getNetworkAlias(defaults.tron),
+          eth: services.getNetworkAlias(defaults.eth),
+          bsc: services.getNetworkAlias(defaults.bsc),
+        },
+      });
     } catch (error) {
       return asError(error);
     }
   });
 
   server.registerTool("get_network", {
-    description: "Get global default network.",
+    description: "Get per-family default networks.",
     inputSchema: {},
   }, async () => {
+    const defaults = services.getGlobalNetworks();
     const active = services.getGlobalNetwork();
-    return asText(services.getNetworkProfile(active));
+    return asText({
+      ...services.getNetworkProfile(active),
+      defaults,
+      defaultAliases: {
+        tron: services.getNetworkAlias(defaults.tron),
+        eth: services.getNetworkAlias(defaults.eth),
+        bsc: services.getNetworkAlias(defaults.bsc),
+      },
+    });
   });
 
   server.registerTool("get_wallet_address", {
@@ -109,9 +130,30 @@ export function registerUsddTools(server: McpServer) {
     inputSchema: {},
   }, async () => {
     try {
+      const activeNetwork = services.getGlobalNetwork();
+      const modeInfo = services.getWalletMode(activeNetwork);
+      const browserAddress = services.getConnectedBrowserWalletAddress();
+      const wallets = await services.listWallets();
+
+      const mergedWallets = browserAddress
+        ? [
+          {
+            id: "browser:tronlink",
+            type: "browser",
+            source: "browser_wallet",
+            address: browserAddress,
+            network: activeNetwork,
+            isActive: modeInfo.mode === "browser",
+          },
+          ...wallets,
+        ]
+        : wallets;
+
       return asText({
         walletStore: services.getWalletStorePath(),
-        wallets: await services.listWallets(),
+        mode: modeInfo.mode,
+        activeNetwork,
+        wallets: mergedWallets,
       });
     } catch (error) {
       return asError(error);

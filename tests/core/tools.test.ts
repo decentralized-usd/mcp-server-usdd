@@ -18,8 +18,10 @@ const servicesMock = vi.hoisted(() => {
     connectBrowserWallet: vi.fn(),
     setWalletMode: vi.fn(),
     getWalletMode: vi.fn(),
+    getConnectedBrowserWalletAddress: vi.fn(),
     setGlobalNetwork: vi.fn(),
     getGlobalNetwork: vi.fn(),
+    getGlobalNetworks: vi.fn(),
     getNetworkAlias: vi.fn(),
     getNetworkProfile: vi.fn(),
     getProtocolOverview: vi.fn(),
@@ -82,6 +84,18 @@ describe("registerUsddTools", () => {
       }
     });
     servicesMock.getGlobalNetwork.mockReturnValue("tron");
+    servicesMock.getGlobalNetworks.mockReturnValue({
+      tron: "tron",
+      eth: "eth",
+      bsc: "bsc",
+    });
+    servicesMock.getWalletMode.mockReturnValue({
+      mode: "agent",
+      network: "tron",
+      address: "TWallet",
+      browserConnected: false,
+    });
+    servicesMock.getConnectedBrowserWalletAddress.mockReturnValue(null);
     servicesMock.getNetworkAlias.mockImplementation((network: string) => network === "tron" ? "mainnet" : network);
     servicesMock.getNetworkProfile.mockImplementation((network: string) => ({
       network,
@@ -145,7 +159,13 @@ describe("registerUsddTools", () => {
     servicesMock.connectBrowserWallet.mockReturnValue({ mode: "browser", address: "TBrowser" });
     servicesMock.setWalletMode.mockReturnValue({ mode: "agent" });
     servicesMock.getWalletMode.mockReturnValue({ mode: "browser", address: "TBrowser" });
+    servicesMock.setGlobalNetwork.mockReturnValue("tron_nile");
     servicesMock.getGlobalNetwork.mockReturnValue("tron_nile");
+    servicesMock.getGlobalNetworks.mockReturnValue({
+      tron: "tron_nile",
+      eth: "eth",
+      bsc: "bsc",
+    });
     servicesMock.getNetworkProfile.mockReturnValue({
       network: "tron_nile",
       alias: "nile",
@@ -167,13 +187,47 @@ describe("registerUsddTools", () => {
     expect(servicesMock.connectBrowserWallet).toHaveBeenCalledWith({ network: "tron_nile", address: "TBrowser" });
     expect(servicesMock.setWalletMode).toHaveBeenCalledWith("agent", "tron_nile");
     expect(servicesMock.getWalletMode).toHaveBeenCalledWith("tron_nile");
-    expect(servicesMock.setGlobalNetwork).toHaveBeenCalledWith("nile");
+    expect(servicesMock.setGlobalNetwork).toHaveBeenCalledWith("nile", undefined);
     expect(connected.json.mode).toBe("browser");
     expect(switched.json.mode).toBe("agent");
     expect(mode.json.address).toBe("TBrowser");
     expect(setNetwork.json.alias).toBe("nile");
     expect(setNetwork.json.options.tron).toContain("tron_nile");
+    expect(setNetwork.json.defaults).toEqual({
+      tron: "tron_nile",
+      eth: "eth",
+      bsc: "bsc",
+    });
     expect(getNetwork.json.network).toBe("tron_nile");
+  });
+
+  it("supports chain-family scoped defaults", async () => {
+    servicesMock.setGlobalNetwork.mockReturnValue("eth_sepolia");
+    servicesMock.getGlobalNetwork.mockReturnValue("tron_nile");
+    servicesMock.getGlobalNetworks.mockReturnValue({
+      tron: "tron_nile",
+      eth: "eth_sepolia",
+      bsc: "bsc",
+    });
+    servicesMock.getNetworkProfile.mockImplementation((network: string) => ({
+      network,
+      alias: network,
+      family: network.startsWith("eth") ? "eth" : network.startsWith("bsc") ? "bsc" : "tron",
+      options: {
+        tron: ["tron_mainnet", "tron_nile"],
+        eth: ["eth_mainnet", "eth_sepolia"],
+        bsc: ["bsc_mainnet", "bsc_testnet"],
+      },
+    }));
+
+    const server = createServer();
+    const setNetwork = await runTool(server, "set_network", { network: "mainnet", family: "bsc" });
+    const getNetwork = await runTool(server, "get_network");
+
+    expect(servicesMock.setGlobalNetwork).toHaveBeenCalledWith("mainnet", "bsc");
+    expect(setNetwork.json.defaults.eth).toBe("eth_sepolia");
+    expect(setNetwork.json.defaults.bsc).toBe("bsc");
+    expect(getNetwork.json.defaults.tron).toBe("tron_nile");
   });
 
   it("uses tron as the default network for wallet and protocol reads", async () => {
@@ -196,7 +250,27 @@ describe("registerUsddTools", () => {
     const server = createServer();
     const result = await runTool(server, "list_wallets");
     expect(result.json.walletStore).toBe("/tmp/.agent-wallet");
+    expect(result.json.mode).toBe("agent");
     expect(result.json.wallets).toHaveLength(1);
+  });
+
+  it("includes connected browser wallet in list_wallets output", async () => {
+    servicesMock.getWalletStorePath.mockReturnValue("/tmp/.agent-wallet");
+    servicesMock.getConnectedBrowserWalletAddress.mockReturnValue("TBrowser");
+    servicesMock.getWalletMode.mockReturnValue({
+      mode: "browser",
+      network: "tron",
+      address: "TBrowser",
+      browserConnected: true,
+    });
+    servicesMock.listWallets.mockReturnValue([{ id: "tron_1", type: "tron", address: "T1", isActive: true }]);
+    const server = createServer();
+    const result = await runTool(server, "list_wallets");
+
+    expect(result.json.mode).toBe("browser");
+    expect(result.json.wallets[0].id).toBe("browser:tronlink");
+    expect(result.json.wallets[0].address).toBe("TBrowser");
+    expect(result.json.wallets).toHaveLength(2);
   });
 
   it("delegates wallet import and activation", async () => {

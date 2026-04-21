@@ -395,6 +395,10 @@ export function isBrowserWalletMode(): boolean {
   return activeWalletMode === "browser";
 }
 
+export function getConnectedBrowserWalletAddress(): string | null {
+  return getBrowserSigner().getConnectedAddress();
+}
+
 export function listWallets(): WalletInfo[] {
   const provider = getProvider("tron");
   const state = getWalletState();

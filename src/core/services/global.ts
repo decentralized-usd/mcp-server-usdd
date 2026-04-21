@@ -1,6 +1,12 @@
 import { getSupportedNetworks, type NetworkKey } from "../chains.js";
 
-let globalNetwork: NetworkKey = "tron";
+export type NetworkFamily = "tron" | "eth" | "bsc";
+
+let familyDefaults: Record<NetworkFamily, NetworkKey> = {
+  tron: "tron",
+  eth: "eth",
+  bsc: "bsc",
+};
 const NETWORK_ALIASES: Record<string, NetworkKey> = {
   tron_mainnet: "tron",
   tron_nile: "tron_nile",
@@ -12,7 +18,7 @@ const NETWORK_ALIASES: Record<string, NetworkKey> = {
   nile: "tron_nile",
 };
 
-function networkFamily(network: NetworkKey): "tron" | "eth" | "bsc" {
+function networkFamily(network: NetworkKey): NetworkFamily {
   if (network === "tron" || network === "tron_nile") return "tron";
   if (network === "eth" || network === "eth_sepolia") return "eth";
   return "bsc";
@@ -26,14 +32,32 @@ export function getNetworkOptions() {
   } as const;
 }
 
-export function resolveNetworkInput(network: string): NetworkKey {
+function getFamilyMainnet(family: NetworkFamily): NetworkKey {
+  if (family === "eth") return "eth";
+  if (family === "bsc") return "bsc";
+  return "tron";
+}
+
+export function resolveNetworkInput(network: string, family?: NetworkFamily): NetworkKey {
   const normalized = network.trim().toLowerCase();
   if (normalized === "mainnet") {
-    throw new Error("Ambiguous network alias 'mainnet' in multi-chain mode. Use tron_mainnet, eth_mainnet, or bsc_mainnet.");
+    if (!family) {
+      throw new Error("Ambiguous network alias 'mainnet' in multi-chain mode. Use tron_mainnet, eth_mainnet, or bsc_mainnet, or set family.");
+    }
+    return getFamilyMainnet(family);
+  }
+  if (normalized === "nile") {
+    if (family && family !== "tron") {
+      throw new Error("Alias 'nile' only applies to tron family.");
+    }
+    return "tron_nile";
   }
   const resolved = NETWORK_ALIASES[normalized] || (normalized as NetworkKey);
   if (!getSupportedNetworks().includes(resolved)) {
     throw new Error(`Unsupported network: ${network}. Supported keys: ${getSupportedNetworks().join(", ")}. Aliases: tron_mainnet, tron_nile, eth_mainnet, eth_sepolia, bsc_mainnet, bsc_testnet.`);
+  }
+  if (family && networkFamily(resolved) !== family) {
+    throw new Error(`Network '${resolved}' does not belong to family '${family}'.`);
   }
   return resolved;
 }
@@ -57,10 +81,19 @@ export function getNetworkProfile(network: NetworkKey) {
   };
 }
 
-export function getGlobalNetwork(): NetworkKey {
-  return globalNetwork;
+export function getGlobalNetwork(family: NetworkFamily = "tron"): NetworkKey {
+  return familyDefaults[family];
 }
 
-export function setGlobalNetwork(network: string): void {
-  globalNetwork = resolveNetworkInput(network);
+export function getGlobalNetworks(): Record<NetworkFamily, NetworkKey> {
+  return { ...familyDefaults };
+}
+
+export function setGlobalNetwork(network: string, family?: NetworkFamily): NetworkKey {
+  const resolved = resolveNetworkInput(network, family);
+  familyDefaults = {
+    ...familyDefaults,
+    [networkFamily(resolved)]: resolved,
+  };
+  return resolved;
 }

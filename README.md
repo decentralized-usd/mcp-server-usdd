@@ -25,9 +25,9 @@ Current implementation focuses on:
 | TRON | `tron` | TRON-native vault and PSM support |
 | Ethereum | `eth` | Vault, PSM, USDD Savings |
 | BNB Smart Chain | `bsc` | Mirrors ETH deployment structure |
-| TRON Nile | `tron_nile` | Testnet deployment |
-| Ethereum Sepolia  | `eth_sepolia` | Testnet deployment |
-| BSC Testnet | `bsc_testnet` | Testnet deployment |
+| TRON Nile | `tron_nile` | Internal testnet deployment |
+| Ethereum Sepolia  | `eth_sepolia` | Internal testnet deployment |
+| BSC Testnet | `bsc_testnet` | Internal testnet deployment |
 
 ## Prerequisites
 
@@ -196,8 +196,8 @@ Add to .cursor/mcp.json:
 | Tool | Description | Write? |
 |---|---|---|
 | `get_supported_networks` | List supported networks | No |
-| `set_network` | Set global default network (supports aliases `mainnet` and `nile`) | Yes |
-| `get_network` | Get global default network | No |
+| `set_network` | Set default network for one family (`tron`/`eth`/`bsc`), supports aliases like `mainnet`, `nile` | Yes |
+| `get_network` | Get per-family default networks | No |
 | `get_wallet_mode` | Get active wallet signing mode (`agent`/`browser`) | No |
 | `set_wallet_mode` | Switch active signing mode | Yes |
 | `connect_browser_wallet` | Connect a browser wallet and activate browser mode | Yes |
@@ -289,7 +289,7 @@ mcp-server-usdd/
 ## Notes
 
 - Vault writes assume the configured wallet can sign on the target chain.
-- All tools now default to the global network set by `set_network` unless a tool call explicitly passes `network`.
+- All tools default to the family-specific defaults set by `set_network`; if `network` is omitted, tron-family default is used unless the tool call explicitly passes `network`.
 - ERC20/TRC20 flows often require `approve_token` first.
 - Browser mode now supports real transaction signing on TRON networks (`tron`, `tron_nile`) via `tronlink-signer` (TronLink/TIP-6963 flow). EVM networks currently continue to use agent-wallet signing.
 - TRON, ETH, BSC, and internal testnet deployments have similar protocol structure but different addresses and token decimals.

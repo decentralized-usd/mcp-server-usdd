@@ -77,4 +77,5 @@ describe("wallet store", () => {
     expect(configured.address).toBe(importedEvm.address);
     expect(configured.privateKey).toBe(EVM_PRIVATE_KEY);
   }, 20_000);
+
 });

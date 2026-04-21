@@ -15,6 +15,13 @@ const servicesMock = vi.hoisted(() => {
     getWalletStorePath: vi.fn(),
     importWallet: vi.fn(),
     setActiveWallet: vi.fn(),
+    connectBrowserWallet: vi.fn(),
+    setWalletMode: vi.fn(),
+    getWalletMode: vi.fn(),
+    setGlobalNetwork: vi.fn(),
+    getGlobalNetwork: vi.fn(),
+    getNetworkAlias: vi.fn(),
+    getNetworkProfile: vi.fn(),
     getProtocolOverview: vi.fn(),
     getOracleStatus: vi.fn(),
     getPsmStatus: vi.fn(),
@@ -74,12 +81,29 @@ describe("registerUsddTools", () => {
         value.mockReset();
       }
     });
+    servicesMock.getGlobalNetwork.mockReturnValue("tron");
+    servicesMock.getNetworkAlias.mockImplementation((network: string) => network === "tron" ? "mainnet" : network);
+    servicesMock.getNetworkProfile.mockImplementation((network: string) => ({
+      network,
+      alias: network,
+      family: "tron",
+      options: {
+        tron: ["tron_mainnet", "tron_nile"],
+        eth: ["eth_mainnet", "eth_sepolia"],
+        bsc: ["bsc_mainnet", "bsc_testnet"],
+      },
+    }));
   });
 
   it("registers the expected core tools", () => {
     const server = createServer();
     expect(Object.keys(server._registeredTools)).toEqual([
       "get_supported_networks",
+      "connect_browser_wallet",
+      "set_wallet_mode",
+      "get_wallet_mode",
+      "set_network",
+      "get_network",
       "get_wallet_address",
       "list_wallets",
       "import_wallet",
@@ -112,9 +136,44 @@ describe("registerUsddTools", () => {
     const server = createServer();
     const result = await runTool(server, "get_supported_networks");
     expect(result.json).toEqual({
-      networks: ["tron", "eth", "bsc"],
+      networks: ["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"],
       default: "tron",
     });
+  });
+
+  it("supports wallet mode and global network tools", async () => {
+    servicesMock.connectBrowserWallet.mockReturnValue({ mode: "browser", address: "TBrowser" });
+    servicesMock.setWalletMode.mockReturnValue({ mode: "agent" });
+    servicesMock.getWalletMode.mockReturnValue({ mode: "browser", address: "TBrowser" });
+    servicesMock.getGlobalNetwork.mockReturnValue("tron_nile");
+    servicesMock.getNetworkProfile.mockReturnValue({
+      network: "tron_nile",
+      alias: "nile",
+      family: "tron",
+      options: {
+        tron: ["tron_mainnet", "tron_nile"],
+        eth: ["eth_mainnet", "eth_sepolia"],
+        bsc: ["bsc_mainnet", "bsc_testnet"],
+      },
+    });
+    const server = createServer();
+
+    const connected = await runTool(server, "connect_browser_wallet", { network: "tron_nile", address: "TBrowser" });
+    const switched = await runTool(server, "set_wallet_mode", { mode: "agent", network: "tron_nile" });
+    const mode = await runTool(server, "get_wallet_mode", { network: "tron_nile" });
+    const setNetwork = await runTool(server, "set_network", { network: "nile" });
+    const getNetwork = await runTool(server, "get_network");
+
+    expect(servicesMock.connectBrowserWallet).toHaveBeenCalledWith({ network: "tron_nile", address: "TBrowser" });
+    expect(servicesMock.setWalletMode).toHaveBeenCalledWith("agent", "tron_nile");
+    expect(servicesMock.getWalletMode).toHaveBeenCalledWith("tron_nile");
+    expect(servicesMock.setGlobalNetwork).toHaveBeenCalledWith("nile");
+    expect(connected.json.mode).toBe("browser");
+    expect(switched.json.mode).toBe("agent");
+    expect(mode.json.address).toBe("TBrowser");
+    expect(setNetwork.json.alias).toBe("nile");
+    expect(setNetwork.json.options.tron).toContain("tron_nile");
+    expect(getNetwork.json.network).toBe("tron_nile");
   });
 
   it("uses tron as the default network for wallet and protocol reads", async () => {

@@ -20,6 +20,7 @@ import { getNetworkConfig, type NetworkKey } from "../chains.js";
 type WalletType = "tron" | "evm";
 type WalletSource = "generated" | "imported_private_key" | "imported_mnemonic" | "external";
 type SecretType = "private_key" | "mnemonic";
+type WalletMode = "agent" | "browser";
 
 export interface ConfiguredWallet {
   id: string;
@@ -40,6 +41,13 @@ export interface WalletInfo {
   isActive: boolean;
 }
 
+export interface WalletModeInfo {
+  mode: WalletMode;
+  network: NetworkKey;
+  address: string | null;
+  browserConnected: boolean;
+}
+
 interface WalletMetadata {
   source: WalletSource;
   preferredType?: WalletType;
@@ -54,6 +62,8 @@ interface WalletState {
 const WALLET_DIR = process.env.AGENT_WALLET_DIR || join(homedir(), ".agent-wallet");
 const STATE_FILE = join(WALLET_DIR, "usdd-wallet-state.json");
 const MASTER_FILE = join(WALLET_DIR, "master.json");
+const browserWalletByNetwork = new Map<NetworkKey, string>();
+let activeWalletMode: WalletMode = "agent";
 
 function ensureDir(path: string) {
   mkdirSync(path, { recursive: true, mode: 0o700 });
@@ -292,6 +302,88 @@ export function initializeWalletStore() {
   };
 }
 
+function normalizeBrowserAddress(network: NetworkKey, address: string): string {
+  const config = getNetworkConfig(network);
+  const trimmed = address.trim();
+  if (config.kind === "tron") {
+    if (!TronWeb.isAddress(trimmed)) {
+      throw new Error(`Invalid TRON browser wallet address: ${address}`);
+    }
+    return trimmed.startsWith("T") ? trimmed : TronWeb.address.fromHex(trimmed.startsWith("0x") ? `41${trimmed.slice(2)}` : trimmed);
+  }
+  if (!/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
+    throw new Error(`Invalid EVM browser wallet address: ${address}`);
+  }
+  return trimmed.toLowerCase();
+}
+
+function resolveBrowserAddressFromEnv(network: NetworkKey): string | null {
+  const key = `BROWSER_WALLET_ADDRESS_${network.toUpperCase()}`;
+  const scoped = process.env[key]?.trim();
+  if (scoped) return scoped;
+  return process.env.BROWSER_WALLET_ADDRESS?.trim() || null;
+}
+
+export function connectBrowserWallet(params?: { network?: NetworkKey; address?: string }) {
+  const network = params?.network || "tron";
+  const config = getNetworkConfig(network);
+  if (config.kind !== "tron") {
+    throw new Error("Browser wallet mode currently supports TRON-compatible browser wallets only.");
+  }
+
+  const candidate = params?.address || resolveBrowserAddressFromEnv(network);
+  if (!candidate) {
+    throw new Error("Browser mode requires a browser wallet environment. Set BROWSER_WALLET_ADDRESS or switch to agent mode.");
+  }
+
+  const normalized = normalizeBrowserAddress(network, candidate);
+  browserWalletByNetwork.set(network, normalized);
+  activeWalletMode = "browser";
+  return {
+    mode: activeWalletMode,
+    network,
+    address: normalized,
+    browserConnected: true,
+    message: `Connected browser wallet ${normalized} on ${network}.`,
+  };
+}
+
+export function setWalletMode(mode: WalletMode, network?: NetworkKey) {
+  if (mode === "browser") {
+    const target = network || "tron";
+    const browserAddress = browserWalletByNetwork.get(target);
+    if (!browserAddress) {
+      throw new Error(`No browser wallet connected for ${target}. Call connect_browser_wallet first.`);
+    }
+  }
+  activeWalletMode = mode;
+  return getWalletMode(network);
+}
+
+export function getWalletMode(network?: NetworkKey): WalletModeInfo {
+  const target = network || "tron";
+  const browserAddress = browserWalletByNetwork.get(target) || null;
+  if (activeWalletMode === "browser") {
+    return {
+      mode: "browser",
+      network: target,
+      address: browserAddress,
+      browserConnected: Boolean(browserAddress),
+    };
+  }
+
+  return {
+    mode: "agent",
+    network: target,
+    address: getConfiguredWallet(target).address,
+    browserConnected: Boolean(browserAddress),
+  };
+}
+
+export function isBrowserWalletMode(): boolean {
+  return activeWalletMode === "browser";
+}
+
 export function listWallets(): WalletInfo[] {
   const provider = getProvider("tron");
   const state = getWalletState();
@@ -433,6 +525,18 @@ export function setActiveWallet(id: string) {
 }
 
 export function getConfiguredWallet(network: NetworkKey): ConfiguredWallet {
+  if (activeWalletMode === "browser") {
+    const browserAddress = browserWalletByNetwork.get(network);
+    if (browserAddress) {
+      return {
+        id: `browser:${network}`,
+        type: getWalletTypeForNetwork(network),
+        privateKey: "",
+        address: browserAddress,
+      };
+    }
+  }
+
   const walletId = ensureDefaultWalletId();
   const walletType = getWalletTypeForNetwork(network);
   const privateKey = readPrivateKeyFromConfig(walletId, walletType);

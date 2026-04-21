@@ -1,12 +1,12 @@
 # mcp-server-usdd
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![Networks](https://img.shields.io/badge/Networks-TRON%20%7C%20ETH%20%7C%20BSC-red)
+![Networks](https://img.shields.io/badge/Networks-TRON%20%7C%20ETH%20%7C%20BSC%20%7C%20INTERNAL%20TESTNETS-red)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8+-3178C6)
 ![MCP](https://img.shields.io/badge/MCP-1.22.0+-blue)
 ![USDD](https://img.shields.io/badge/Protocol-USDD-green)
 
-An MCP server for the **USDD protocol** across **TRON, Ethereum, and BNB Smart Chain**. The current version focuses on three core surfaces: **Vault/CDP**, **PSM**, and **USDD Savings**.
+An MCP server for the **USDD protocol** across **TRON, Ethereum, and BNB Smart Chain** (plus internal testnets). The current version focuses on three core surfaces: **Vault/CDP**, **PSM**, and **USDD Savings**.
 
 ## Scope
 
@@ -25,6 +25,9 @@ Current implementation focuses on:
 | TRON | `tron` | TRON-native vault and PSM support |
 | Ethereum | `eth` | Vault, PSM, USDD Savings |
 | BNB Smart Chain | `bsc` | Mirrors ETH deployment structure |
+| TRON Nile | `tron_nile` | Testnet deployment |
+| Ethereum Sepolia  | `eth_sepolia` | Testnet deployment |
+| BSC Testnet | `bsc_testnet` | Testnet deployment |
 
 ## Prerequisites
 
@@ -65,6 +68,21 @@ On startup, the server will:
 
 You can also manage wallets via **CLI** or **MCP tools**:
 
+### Wallet Modes
+
+The server supports two signing modes:
+
+- **Agent mode**: default mode. Uses encrypted local private keys from `~/.agent-wallet/`.
+- **Browser mode**: connect a TronLink-compatible browser wallet address and switch runtime mode via MCP tools.
+
+Browser mode tools:
+
+| Tool | Description |
+|------|-------------|
+| `connect_browser_wallet` | Connect browser wallet address and switch to browser mode |
+| `set_wallet_mode` | Switch between `browser` and `agent` |
+| `get_wallet_mode` | Inspect current signing mode and active address |
+
 #### CLI (agent-wallet)
 ```bash
 # Import an existing private key or mnemonic
@@ -95,6 +113,17 @@ export AGENT_WALLET_PASSWORD="your_wallet_password"
 
 # Strongly recommended — avoids TronGrid 429 rate limiting on mainnet
 export TRONGRID_API_KEY="your_trongrid_api_key"
+
+# Optional browser wallet address for Browser Wallet Mode
+export BROWSER_WALLET_ADDRESS="T..."
+
+# Optional per-network browser wallet address
+export BROWSER_WALLET_ADDRESS_TRON_NILE="T..."
+
+# Optional internal testnet RPCs
+export TRON_NILE_FULL_NODE="https://nile.trongrid.io"
+export ETH_SEPOLIA_RPC_URL="https://ethereum-sepolia-rpc.publicnode.com"
+export BSC_TESTNET_RPC_URL="https://bsc-testnet-rpc.publicnode.com"
 ```
 
 ## Client Configuration
@@ -162,11 +191,25 @@ Add to .cursor/mcp.json:
 
 ## Tools
 
-### Common
+### Wallet & Network
 
 | Tool | Description | Write? |
 |---|---|---|
 | `get_supported_networks` | List supported networks | No |
+| `set_network` | Set global default network (supports aliases `mainnet` and `nile`) | Yes |
+| `get_network` | Get global default network | No |
+| `get_wallet_mode` | Get active wallet signing mode (`agent`/`browser`) | No |
+| `set_wallet_mode` | Switch active signing mode | Yes |
+| `connect_browser_wallet` | Connect a browser wallet and activate browser mode | Yes |
+| `get_wallet_address` | Shows current address for the active/default network | No |
+| `list_wallets` | List encrypted local wallets | No |
+| `set_active_wallet` | Switch active encrypted wallet by ID | Yes |
+| `import_wallet` | Import private key/mnemonic into encrypted local store | Yes |
+
+### Common
+
+| Tool | Description | Write? |
+|---|---|---|
 | `get_protocol_overview` | Show configured protocol addresses, ilks, PSMs, and ceilings | No |
 | `get_supported_ilks` | List configured collateral types and PSM joins | No |
 | `get_token_balance` | Read ERC20/TRC20 balance | No |
@@ -246,8 +289,10 @@ mcp-server-usdd/
 ## Notes
 
 - Vault writes assume the configured wallet can sign on the target chain.
+- All tools now default to the global network set by `set_network` unless a tool call explicitly passes `network`.
 - ERC20/TRC20 flows often require `approve_token` first.
-- TRON, ETH, and BSC deployments have similar USDD protocol structure but different addresses and token decimals.
+- Browser mode currently manages browser wallet address/mode at runtime; actual write signing still requires an environment that can complete browser-wallet signing flow.
+- TRON, ETH, BSC, and internal testnet deployments have similar protocol structure but different addresses and token decimals.
 - This version intentionally excludes migration and auction actions so we can iterate the Vault + PSM + USDD Savings core first.
 
 ## Security Considerations

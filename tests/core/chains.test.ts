@@ -10,8 +10,8 @@ import {
 } from "../../src/core/chains.js";
 
 describe("chains", () => {
-  it("exposes the three public mainnets", () => {
-    expect(getSupportedNetworks()).toEqual(["tron", "eth", "bsc"]);
+  it("exposes mainnets and internal testnets", () => {
+    expect(getSupportedNetworks()).toEqual(["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"]);
   });
 
   it("returns the expected mainnet config", () => {
@@ -23,6 +23,12 @@ describe("chains", () => {
   it("throws for unsupported networks", () => {
     expect(() => getNetworkConfig("sepolia")).toThrow("Unsupported network");
     expect(() => getNetworkConfig("unknown")).toThrow("Unsupported network");
+  });
+
+  it("returns expected internal testnet config", () => {
+    expect(getNetworkConfig("tron_nile").nativeSymbol).toBe("TRX");
+    expect(getNetworkConfig("eth_sepolia").chainId).toBe(11155111);
+    expect(getNetworkConfig("bsc_testnet").chainId).toBe(97);
   });
 
   it("resolves ilks case-insensitively", () => {

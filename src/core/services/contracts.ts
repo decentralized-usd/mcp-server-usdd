@@ -1,7 +1,7 @@
 import { encodeFunctionData } from "viem";
 import { getPublicClient, getWalletClient } from "./clients.js";
 import { getNetworkConfig, type NetworkKey } from "../chains.js";
-import { getConfiguredWallet } from "./wallet.js";
+import { getConfiguredWallet, isBrowserWalletMode } from "./wallet.js";
 import { utils } from "./utils.js";
 import { PROXY_CALL_ABI, PROXY_REGISTRY_ABI } from "../abis.js";
 
@@ -62,6 +62,10 @@ export async function readContract(params: { network: NetworkKey; address: strin
 }
 
 export async function writeContract(params: { network: NetworkKey; address: string; abi: readonly any[]; functionName: string; args?: any[]; value?: bigint }) {
+  if (isBrowserWalletMode()) {
+    throw new Error("Browser wallet mode is active. Current runtime cannot directly sign browser-wallet transactions; switch to agent mode or run in a browser-enabled environment.");
+  }
+
   const config = getNetworkConfig(params.network);
   const args = params.args || [];
   if (config.kind === "tron") {

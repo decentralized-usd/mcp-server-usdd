@@ -78,4 +78,14 @@ describe("wallet store", () => {
     expect(configured.privateKey).toBe(EVM_PRIVATE_KEY);
   }, 20_000);
 
+  it("requires selecting wallet mode before write operations", async () => {
+    const wallet = await import("../../../src/core/services/wallet.js");
+    wallet.initializeWalletStore();
+
+    expect(() => wallet.assertWalletReadyForWrite("tron")).toThrow(/Wallet mode not selected/i);
+
+    wallet.setWalletMode("agent", "tron");
+    expect(() => wallet.assertWalletReadyForWrite("tron")).not.toThrow();
+  }, 20_000);
+
 });

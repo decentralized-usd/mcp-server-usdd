@@ -33,6 +33,7 @@ const servicesMock = vi.hoisted(() => {
     analyzeVaultRisk: vi.fn(),
     getSavingsStatus: vi.fn(),
     openVault: vi.fn(),
+    getNativeBalance: vi.fn(),
     getTokenBalance: vi.fn(),
     checkAllowance: vi.fn(),
     approveToken: vi.fn(),
@@ -131,6 +132,7 @@ describe("registerUsddTools", () => {
       "analyze_vault_risk",
       "get_savings_status",
       "open_vault",
+      "get_native_balance",
       "get_token_balance",
       "check_allowance",
       "approve_token",
@@ -244,6 +246,21 @@ describe("registerUsddTools", () => {
     expect(overview.json.network).toBe("tron");
   });
 
+  it("returns wallet setup guidance when wallet mode is unset", async () => {
+    servicesMock.getWalletMode.mockReturnValue({
+      mode: "unset",
+      network: "tron",
+      address: null,
+      browserConnected: false,
+    });
+    const server = createServer();
+    const wallet = await runTool(server, "get_wallet_address");
+
+    expect(wallet.json.walletMode).toBe("unset");
+    expect(wallet.json.options.recommended.action).toBe("connect_browser_wallet");
+    expect(servicesMock.getWalletAddress).not.toHaveBeenCalled();
+  });
+
   it("lists wallets with the wallet store path", async () => {
     servicesMock.getWalletStorePath.mockReturnValue("/tmp/.agent-wallet");
     servicesMock.listWallets.mockReturnValue([{ id: "tron_1", type: "tron", address: "T1", isActive: true }]);
@@ -347,12 +364,14 @@ describe("registerUsddTools", () => {
     });
   });
 
-  it("passes through token balance, allowance, and approval arguments", async () => {
+  it("passes through native/token balance, allowance, and approval arguments", async () => {
+    servicesMock.getNativeBalance.mockResolvedValue({ symbol: "ETH" });
     servicesMock.getTokenBalance.mockResolvedValue({ symbol: "USDD" });
     servicesMock.checkAllowance.mockResolvedValue({ sufficient: true });
     servicesMock.approveToken.mockResolvedValue({ txID: "0xapprove" });
     const server = createServer();
 
+    const native = await runTool(server, "get_native_balance", { owner: "0xOwner", network: "eth" });
     await runTool(server, "get_token_balance", { token: "0xToken", owner: "0xOwner", decimals: 6, network: "eth" });
     await runTool(server, "check_allowance", {
       token: "0xToken",
@@ -370,6 +389,10 @@ describe("registerUsddTools", () => {
       network: "eth",
     });
 
+    expect(servicesMock.getNativeBalance).toHaveBeenCalledWith({
+      network: "eth",
+      owner: "0xOwner",
+    });
     expect(servicesMock.getTokenBalance).toHaveBeenCalledWith({
       network: "eth",
       token: "0xToken",
@@ -391,6 +414,7 @@ describe("registerUsddTools", () => {
       amount: "max",
       decimals: 6,
     });
+    expect(native.json.symbol).toBe("ETH");
     expect(approved.json.txID).toBe("0xapprove");
   });
 

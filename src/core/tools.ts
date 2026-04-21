@@ -60,7 +60,7 @@ export function registerUsddTools(server: McpServer) {
   });
 
   server.registerTool("get_wallet_mode", {
-    description: "Get current signing mode and active address.",
+    description: "Get current signing mode (`browser` / `agent` / `unset`) and active address.",
     inputSchema: {
       network: networkField,
     },
@@ -114,12 +114,38 @@ export function registerUsddTools(server: McpServer) {
   });
 
   server.registerTool("get_wallet_address", {
-    description: "Get the active wallet address for a specific network. Automatically generates an encrypted wallet on first use.",
+    description: "Get wallet status and active address for a network. If wallet mode is unset, returns a setup guide before write operations.",
     inputSchema: { network: networkField },
   }, async ({ network }) => {
     try {
       const resolved = resolveNetwork(network as NetworkKey);
-      return asText({ network: resolved, address: services.getWalletAddress(resolved) });
+      const modeInfo = services.getWalletMode(resolved);
+      if (modeInfo.mode === "unset") {
+        return asText({
+          network: resolved,
+          walletMode: "unset",
+          address: null,
+          message: "No wallet mode selected yet. Choose how to sign before your first write operation.",
+          options: {
+            recommended: {
+              mode: "browser",
+              action: "connect_browser_wallet",
+              reason: "Use TronLink/browser signing. Private keys never leave the browser.",
+            },
+            alternative: {
+              mode: "agent",
+              action: "set_wallet_mode",
+              params: { mode: "agent", network: resolved },
+              reason: "Use encrypted local wallet storage in ~/.agent-wallet/.",
+            },
+          },
+        });
+      }
+      return asText({
+        network: resolved,
+        walletMode: modeInfo.mode,
+        address: services.getWalletAddress(resolved),
+      });
     } catch (error) {
       return asError(error);
     }
@@ -289,6 +315,23 @@ export function registerUsddTools(server: McpServer) {
   }, async ({ ilk, network }) => {
     try {
       return asText(await services.openVault(resolveNetwork(network as NetworkKey), ilk));
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_native_balance", {
+    description: "Get native token balance (TRX/ETH/BNB) for the configured wallet or a specified owner.",
+    inputSchema: {
+      owner: z.string().optional().describe("Optional owner address; defaults to configured wallet"),
+      network: networkField,
+    },
+  }, async ({ owner, network }) => {
+    try {
+      return asText(await services.getNativeBalance({
+        network: resolveNetwork(network as NetworkKey),
+        owner,
+      }));
     } catch (error) {
       return asError(error);
     }

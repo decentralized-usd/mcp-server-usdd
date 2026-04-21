@@ -57,33 +57,23 @@ npm run dev
 
 ## Configuration
 
-### Wallet Setup (Automatic)
-
-The server uses [@bankofai/agent-wallet](https://github.com/BofAI/agent-wallet) for encrypted local wallet storage. On first startup it will automatically initialize `~/.agent-wallet/` and create a default wallet if none exists.
-
-On startup, the server will:
-1. Check for existing wallets in `~/.agent-wallet/`
-2. If none are found, auto-generate a new encrypted wallet
-3. Display the derived TRON and EVM addresses in the console
-
-You can also manage wallets via **CLI** or **MCP tools**:
-
 ### Wallet Modes
 
 The server supports two signing modes:
 
-- **Agent mode**: default mode. Uses encrypted local private keys from `~/.agent-wallet/`.
-- **Browser mode**: connect a TronLink-compatible browser wallet address and switch runtime mode via MCP tools.
+- **Browser mode (recommended)**: connect a TronLink-compatible browser wallet and sign in browser.
+- **Agent mode**: use encrypted local private keys stored in `~/.agent-wallet/`.
 
-Browser mode tools:
+Before your first write operation, explicitly choose a wallet mode:
+1. Option A (recommended): `connect_browser_wallet`
+2. Option B: `set_wallet_mode` with `mode="agent"`
 
-| Tool | Description |
-|------|-------------|
-| `connect_browser_wallet` | Connect browser wallet address and switch to browser mode |
-| `set_wallet_mode` | Switch between `browser` and `agent` |
-| `get_wallet_mode` | Inspect current signing mode and active address |
+You can also manage wallets via CLI or MCP tools:
 
 #### CLI (agent-wallet)
+
+The server uses [@bankofai/agent-wallet](https://github.com/BofAI/agent-wallet) for encrypted local wallet storage. On first startup it will automatically initialize ~/.agent-wallet/ and create a default wallet if none exists.
+
 ```bash
 # Import an existing private key or mnemonic
 npx agent-wallet add
@@ -98,33 +88,17 @@ npx agent-wallet list
 npx agent-wallet activate <wallet-id>
 ```
 
-#### MCP Tools (runtime)
+### MCP Tools (runtime)
 
 | Tool | Description |
 |------|-------------|
-| `get_wallet_address` | Shows current address (auto-generates wallet if needed) |
-| `import_wallet` | Import an existing private key (stored encrypted) |
+| `get_wallet_address` | Shows current address, or returns first-use wallet selection guidance |
+| `connect_browser_wallet` | Connect TronLink / browser wallet for signing |
+| `set_wallet_mode` | Switch between browser and agent signing |
+| `get_wallet_mode` | Show current signing mode and addresses |
 | `list_wallets` | List all wallets with IDs, types, addresses |
 | `set_active_wallet` | Switch active wallet by ID |
 
-```bash
-# Optional for automated/CI setups
-export AGENT_WALLET_PASSWORD="your_wallet_password"
-
-# Strongly recommended — avoids TronGrid 429 rate limiting on mainnet
-export TRONGRID_API_KEY="your_trongrid_api_key"
-
-# Optional browser wallet address for Browser Wallet Mode
-export BROWSER_WALLET_ADDRESS="T..."
-
-# Optional per-network browser wallet address
-export BROWSER_WALLET_ADDRESS_TRON_NILE="T..."
-
-# Optional internal testnet RPCs
-export TRON_NILE_FULL_NODE="https://nile.trongrid.io"
-export ETH_SEPOLIA_RPC_URL="https://ethereum-sepolia-rpc.publicnode.com"
-export BSC_TESTNET_RPC_URL="https://bsc-testnet-rpc.publicnode.com"
-```
 
 ## Client Configuration
 
@@ -201,7 +175,7 @@ Add to .cursor/mcp.json:
 | `get_wallet_mode` | Get active wallet signing mode (`agent`/`browser`) | No |
 | `set_wallet_mode` | Switch active signing mode | Yes |
 | `connect_browser_wallet` | Connect a browser wallet and activate browser mode | Yes |
-| `get_wallet_address` | Shows current address for the active/default network | No |
+| `get_wallet_address` | Shows current address; returns wallet setup options when mode is unset | No |
 | `list_wallets` | List encrypted local wallets | No |
 | `set_active_wallet` | Switch active encrypted wallet by ID | Yes |
 | `import_wallet` | Import private key/mnemonic into encrypted local store | Yes |
@@ -212,6 +186,7 @@ Add to .cursor/mcp.json:
 |---|---|---|
 | `get_protocol_overview` | Show configured protocol addresses, ilks, PSMs, and ceilings | No |
 | `get_supported_ilks` | List configured collateral types and PSM joins | No |
+| `get_native_balance` | Read native balance (`TRX` / `ETH` / `BNB`) | No |
 | `get_token_balance` | Read ERC20/TRC20 balance | No |
 | `check_allowance` | Read ERC20/TRC20 allowance and compare against an optional amount | No |
 | `approve_token` | Approve token allowance | Yes |

@@ -1,7 +1,7 @@
 import { encodeFunctionData } from "viem";
 import { getPublicClient, getWalletClient } from "./clients.js";
 import { getNetworkConfig, type NetworkKey } from "../chains.js";
-import { getConfiguredWallet, getWalletAddress, signTransactionWithWallet } from "./wallet.js";
+import { assertWalletReadyForWrite, getConfiguredWallet, getWalletAddress, signTransactionWithWallet } from "./wallet.js";
 import { utils } from "./utils.js";
 import { PROXY_CALL_ABI, PROXY_REGISTRY_ABI } from "../abis.js";
 
@@ -77,6 +77,7 @@ export async function readContract(params: { network: NetworkKey; address: strin
 }
 
 export async function writeContract(params: { network: NetworkKey; address: string; abi: readonly any[]; functionName: string; args?: any[]; value?: bigint }) {
+  assertWalletReadyForWrite(params.network);
   const config = getNetworkConfig(params.network);
   const args = params.args || [];
   if (config.kind === "tron") {

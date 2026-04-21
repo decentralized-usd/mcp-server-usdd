@@ -291,7 +291,7 @@ mcp-server-usdd/
 - Vault writes assume the configured wallet can sign on the target chain.
 - All tools now default to the global network set by `set_network` unless a tool call explicitly passes `network`.
 - ERC20/TRC20 flows often require `approve_token` first.
-- Browser mode currently manages browser wallet address/mode at runtime; actual write signing still requires an environment that can complete browser-wallet signing flow.
+- Browser mode now supports real transaction signing on TRON networks (`tron`, `tron_nile`) via `tronlink-signer` (TronLink/TIP-6963 flow). EVM networks currently continue to use agent-wallet signing.
 - TRON, ETH, BSC, and internal testnet deployments have similar protocol structure but different addresses and token decimals.
 - This version intentionally excludes migration and auction actions so we can iterate the Vault + PSM + USDD Savings core first.
 

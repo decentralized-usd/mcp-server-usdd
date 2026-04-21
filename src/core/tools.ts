@@ -33,7 +33,7 @@ export function registerUsddTools(server: McpServer) {
     },
   }, async ({ network, address }) => {
     try {
-      return asText(services.connectBrowserWallet({
+      return asText(await services.connectBrowserWallet({
         network: resolveNetwork(network as NetworkKey),
         address,
       }));

@@ -32,6 +32,7 @@
     "@scure/bip39": "^2.0.1",
     "cors": "^2.8.6",
     "express": "^4.21.2",
+    "tronlink-signer": "0.1.1",
     "tronweb": "^6.1.1",
     "viem": "^2.37.5",
     "zod": "^3.24.3"

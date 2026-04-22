@@ -22,8 +22,7 @@ import type { TronNetwork } from "tronlink-signer";
 type WalletType = "tron" | "evm";
 type WalletSource = "generated" | "imported_private_key" | "imported_mnemonic" | "external";
 type SecretType = "private_key" | "mnemonic";
-type WalletMode = "agent" | "browser" | "unset";
-type SelectableWalletMode = Exclude<WalletMode, "unset">;
+type WalletMode = "agent" | "browser";
 
 export interface ConfiguredWallet {
   id: string;
@@ -68,7 +67,9 @@ interface WalletState {
 const WALLET_DIR = process.env.AGENT_WALLET_DIR || join(homedir(), ".agent-wallet");
 const STATE_FILE = join(WALLET_DIR, "usdd-wallet-state.json");
 const MASTER_FILE = join(WALLET_DIR, "master.json");
-let activeWalletMode: WalletMode = "unset";
+let activeWalletMode: WalletMode = "agent";
+let tronWritePromptShownThisSession = false;
+let tronModeChosenThisSession = false;
 let browserSigner: TronWalletSigner | null = null;
 
 function ensureDir(path: string) {
@@ -402,6 +403,7 @@ export async function connectBrowserWallet(params?: { network?: NetworkKey; addr
   });
 
   activeWalletMode = "browser";
+  tronModeChosenThisSession = true;
   return {
     mode: activeWalletMode,
     network,
@@ -412,7 +414,7 @@ export async function connectBrowserWallet(params?: { network?: NetworkKey; addr
   };
 }
 
-export function setWalletMode(mode: SelectableWalletMode, network?: NetworkKey) {
+export function setWalletMode(mode: WalletMode, network?: NetworkKey) {
   if (mode === "browser") {
     const target = network || "tron";
     if (getNetworkConfig(target).kind !== "tron") {
@@ -424,6 +426,7 @@ export function setWalletMode(mode: SelectableWalletMode, network?: NetworkKey) 
     }
   }
   activeWalletMode = mode;
+  tronModeChosenThisSession = true;
   return getWalletMode(network);
 }
 
@@ -431,15 +434,6 @@ export function getWalletMode(network?: NetworkKey): WalletModeInfo {
   const target = network || "tron";
   const browserAddress = getBrowserSigner().getConnectedAddress();
   const browserSupported = getNetworkConfig(target).kind === "tron";
-  if (activeWalletMode === "unset") {
-    return {
-      mode: "unset",
-      network: target,
-      address: null,
-      browserConnected: browserSupported && Boolean(browserAddress),
-    };
-  }
-
   if (activeWalletMode === "browser") {
     return {
       mode: "browser",
@@ -469,11 +463,14 @@ export function assertWalletReadyForWrite(network: NetworkKey) {
   const config = getNetworkConfig(network);
   const browserAddress = getBrowserSigner().getConnectedAddress();
 
-  if (activeWalletMode === "unset") {
+  // On each server session, remind once before the first TRON write to choose preferred mode.
+  if (config.kind === "tron" && !tronModeChosenThisSession && !tronWritePromptShownThisSession) {
+    tronWritePromptShownThisSession = true;
     throw new Error(
-      "Wallet mode not selected for write operations. Choose one before sending transactions:\n" +
+      "Before your first TRON write this session, choose wallet mode:\n" +
       "Option A (Recommended): connect_browser_wallet (TronLink/browser signing, private key stays in browser)\n" +
-      "Option B: set_wallet_mode with mode='agent' (encrypted local wallet in ~/.agent-wallet/).",
+      "Option B: set_wallet_mode with mode='agent' (encrypted local wallet in ~/.agent-wallet/).\n" +
+      "If you skip this step, TRON writes will continue with current default mode: agent.",
     );
   }
 

@@ -246,19 +246,20 @@ describe("registerUsddTools", () => {
     expect(overview.json.network).toBe("tron");
   });
 
-  it("returns wallet setup guidance when wallet mode is unset", async () => {
+  it("returns active wallet address in default agent mode", async () => {
     servicesMock.getWalletMode.mockReturnValue({
-      mode: "unset",
+      mode: "agent",
       network: "tron",
-      address: null,
+      address: "TWallet",
       browserConnected: false,
     });
+    servicesMock.getWalletAddress.mockReturnValue("TWallet");
     const server = createServer();
     const wallet = await runTool(server, "get_wallet_address");
 
-    expect(wallet.json.walletMode).toBe("unset");
-    expect(wallet.json.options.recommended.action).toBe("connect_browser_wallet");
-    expect(servicesMock.getWalletAddress).not.toHaveBeenCalled();
+    expect(wallet.json.walletMode).toBe("agent");
+    expect(wallet.json.address).toBe("TWallet");
+    expect(servicesMock.getWalletAddress).toHaveBeenCalledWith("tron");
   });
 
   it("lists wallets with the wallet store path", async () => {

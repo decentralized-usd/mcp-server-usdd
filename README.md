@@ -64,7 +64,7 @@ The server supports two signing modes:
 - **Browser mode (recommended)**: connect a TronLink-compatible browser wallet and sign in browser.
 - **Agent mode**: use encrypted local private keys stored in `~/.agent-wallet/`.
 
-Before your first write operation, explicitly choose a wallet mode:
+For TRON writes, each new MCP session shows a one-time wallet-mode reminder:
 1. Option A (recommended): `connect_browser_wallet`
 2. Option B: `set_wallet_mode` with `mode="agent"`
 
@@ -92,12 +92,12 @@ npx agent-wallet activate <wallet-id>
 
 | Tool | Description |
 |------|-------------|
-| `get_wallet_address` | Shows current address, or returns first-use wallet selection guidance |
+| `get_wallet_address` | Shows current address |
 | `connect_browser_wallet` | Connect TronLink / browser wallet for signing |
 | `set_wallet_mode` | Switch between browser and agent signing |
 | `get_wallet_mode` | Show current signing mode and addresses |
-| `list_wallets` | List all wallets with IDs, types, addresses |
-| `set_active_wallet` | Switch active wallet by ID |
+| `list_wallets` | List wallets with per-family active status (`tron` and `evm`) |
+| `set_active_wallet` | Switch active wallet by ID, optionally scoped by `walletType` (`tron`/`evm`) |
 
 
 ## Client Configuration
@@ -175,9 +175,9 @@ Add to .cursor/mcp.json:
 | `get_wallet_mode` | Get active wallet signing mode (`agent`/`browser`) | No |
 | `set_wallet_mode` | Switch active signing mode | Yes |
 | `connect_browser_wallet` | Connect a browser wallet and activate browser mode | Yes |
-| `get_wallet_address` | Shows current address; returns wallet setup options when mode is unset | No |
-| `list_wallets` | List encrypted local wallets | No |
-| `set_active_wallet` | Switch active encrypted wallet by ID | Yes |
+| `get_wallet_address` | Show current address for the target network | No |
+| `list_wallets` | List wallets and per-family active pointers (`tron`/`evm`) | No |
+| `set_active_wallet` | Switch active wallet by ID (supports optional `walletType`) | Yes |
 | `import_wallet` | Import private key/mnemonic into encrypted local store | Yes |
 
 ### Common

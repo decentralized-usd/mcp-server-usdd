@@ -60,7 +60,7 @@ export function registerUsddTools(server: McpServer) {
   });
 
   server.registerTool("get_wallet_mode", {
-    description: "Get current signing mode (`browser` / `agent` / `unset`) and active address.",
+    description: "Get current signing mode (`browser` / `agent`) and active address.",
     inputSchema: {
       network: networkField,
     },
@@ -114,33 +114,12 @@ export function registerUsddTools(server: McpServer) {
   });
 
   server.registerTool("get_wallet_address", {
-    description: "Get wallet status and active address for a network. If wallet mode is unset, returns a setup guide before write operations.",
+    description: "Get wallet status and active address for a network.",
     inputSchema: { network: networkField },
   }, async ({ network }) => {
     try {
       const resolved = resolveNetwork(network as NetworkKey);
       const modeInfo = services.getWalletMode(resolved);
-      if (modeInfo.mode === "unset") {
-        return asText({
-          network: resolved,
-          walletMode: "unset",
-          address: null,
-          message: "No wallet mode selected yet. Choose how to sign before your first write operation.",
-          options: {
-            recommended: {
-              mode: "browser",
-              action: "connect_browser_wallet",
-              reason: "Use TronLink/browser signing. Private keys never leave the browser.",
-            },
-            alternative: {
-              mode: "agent",
-              action: "set_wallet_mode",
-              params: { mode: "agent", network: resolved },
-              reason: "Use encrypted local wallet storage in ~/.agent-wallet/.",
-            },
-          },
-        });
-      }
       return asText({
         network: resolved,
         walletMode: modeInfo.mode,

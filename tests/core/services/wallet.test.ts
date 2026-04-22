@@ -78,11 +78,12 @@ describe("wallet store", () => {
     expect(configured.privateKey).toBe(EVM_PRIVATE_KEY);
   }, 20_000);
 
-  it("shows TRON wallet-mode reminder once per session before writes", async () => {
+  it("prompts once before first TRON write in each session", async () => {
     const wallet = await import("../../../src/core/services/wallet.js");
     wallet.initializeWalletStore();
 
-    expect(() => wallet.assertWalletReadyForWrite("tron")).toThrow(/Before your first TRON write this session/i);
+    expect(() => wallet.assertWalletReadyForWrite("tron")).toThrow(/Before your first TRON write in this Claude session/i);
+    expect(() => wallet.assertWalletReadyForWrite("tron")).not.toThrow();
     expect(() => wallet.assertWalletReadyForWrite("tron")).not.toThrow();
   }, 20_000);
 

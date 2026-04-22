@@ -64,9 +64,7 @@ The server supports two signing modes:
 - **Browser mode (recommended)**: connect a TronLink-compatible browser wallet and sign in browser.
 - **Agent mode**: use encrypted local private keys stored in `~/.agent-wallet/`.
 
-For TRON writes, each new MCP session shows a one-time wallet-mode reminder:
-1. Option A (recommended): `connect_browser_wallet`
-2. Option B: `set_wallet_mode` with `mode="agent"`
+For TRON writes, each Claude session shows a one-time signing-mode confirmation reminder before the first write.
 
 You can also manage wallets via CLI or MCP tools:
 

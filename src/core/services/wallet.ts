@@ -68,8 +68,7 @@ const WALLET_DIR = process.env.AGENT_WALLET_DIR || join(homedir(), ".agent-walle
 const STATE_FILE = join(WALLET_DIR, "usdd-wallet-state.json");
 const MASTER_FILE = join(WALLET_DIR, "master.json");
 let activeWalletMode: WalletMode = "agent";
-let tronWritePromptShownThisSession = false;
-let tronModeChosenThisSession = false;
+let tronWriteModePromptedThisSession = false;
 let browserSigner: TronWalletSigner | null = null;
 
 function ensureDir(path: string) {
@@ -403,7 +402,6 @@ export async function connectBrowserWallet(params?: { network?: NetworkKey; addr
   });
 
   activeWalletMode = "browser";
-  tronModeChosenThisSession = true;
   return {
     mode: activeWalletMode,
     network,
@@ -426,7 +424,6 @@ export function setWalletMode(mode: WalletMode, network?: NetworkKey) {
     }
   }
   activeWalletMode = mode;
-  tronModeChosenThisSession = true;
   return getWalletMode(network);
 }
 
@@ -463,14 +460,14 @@ export function assertWalletReadyForWrite(network: NetworkKey) {
   const config = getNetworkConfig(network);
   const browserAddress = getBrowserSigner().getConnectedAddress();
 
-  // On each server session, remind once before the first TRON write to choose preferred mode.
-  if (config.kind === "tron" && !tronModeChosenThisSession && !tronWritePromptShownThisSession) {
-    tronWritePromptShownThisSession = true;
+  // Prompt once per MCP session before the first TRON write.
+  if (config.kind === "tron" && !tronWriteModePromptedThisSession) {
+    tronWriteModePromptedThisSession = true;
     throw new Error(
-      "Before your first TRON write this session, choose wallet mode:\n" +
-      "Option A (Recommended): connect_browser_wallet (TronLink/browser signing, private key stays in browser)\n" +
-      "Option B: set_wallet_mode with mode='agent' (encrypted local wallet in ~/.agent-wallet/).\n" +
-      "If you skip this step, TRON writes will continue with current default mode: agent.",
+      "Before your first TRON write in this Claude session, confirm signing mode:\n" +
+      "Current default mode: agent.\n" +
+      "Option A (Recommended): connect_browser_wallet (TronLink/browser signing)\n" +
+      "Option B: keep current mode (agent) and retry the write.",
     );
   }
 

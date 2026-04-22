@@ -175,10 +175,23 @@ export function registerUsddTools(server: McpServer) {
         ]
         : wallets;
 
+      const activeTronWalletId = modeInfo.mode === "browser"
+        ? "browser:tronlink"
+        : (wallets.find((wallet: any) => wallet.isActiveTron)?.id || null);
+      const activeEvmWalletId = wallets.find((wallet: any) => wallet.isActiveEvm)?.id || null;
+
       return asText({
         walletStore: services.getWalletStorePath(),
         mode: modeInfo.mode,
+        signingModes: {
+          tron: modeInfo.mode,
+          evm: "agent",
+        },
         activeNetwork,
+        activeWallets: {
+          tron: activeTronWalletId,
+          evm: activeEvmWalletId,
+        },
         wallets: mergedWallets,
       });
     } catch (error) {
@@ -211,10 +224,11 @@ export function registerUsddTools(server: McpServer) {
     description: "Set the active encrypted wallet by ID. Active wallet selection is tracked separately for tron and evm.",
     inputSchema: {
       walletId: z.string().min(1).describe("Wallet id from list_wallets"),
+      walletType: walletTypeField.optional().describe("Optional wallet family to activate independently (tron or evm)"),
     },
-  }, async ({ walletId }) => {
+  }, async ({ walletId, walletType }) => {
     try {
-      return asText(await services.setActiveWallet(walletId));
+      return asText(await services.setActiveWallet(walletId, walletType));
     } catch (error) {
       return asError(error);
     }

@@ -42,6 +42,8 @@ export interface WalletInfo {
   createdAt: string;
   updatedAt: string;
   isActive: boolean;
+  isActiveTron?: boolean;
+  isActiveEvm?: boolean;
 }
 
 export interface WalletModeInfo {
@@ -60,6 +62,7 @@ interface WalletMetadata {
 
 interface WalletState {
   wallets: Record<string, WalletMetadata>;
+  activeByType?: Partial<Record<WalletType, string>>;
 }
 
 const WALLET_DIR = process.env.AGENT_WALLET_DIR || join(homedir(), ".agent-wallet");
@@ -117,14 +120,29 @@ function getKvStore() {
 function getWalletState(): WalletState {
   ensureWalletStoreLayout();
   try {
-    return JSON.parse(readFileSync(STATE_FILE, "utf8")) as WalletState;
+    const parsed = JSON.parse(readFileSync(STATE_FILE, "utf8")) as WalletState;
+    return {
+      wallets: parsed.wallets || {},
+      activeByType: parsed.activeByType || {},
+    };
   } catch {
-    return { wallets: {} };
+    return { wallets: {}, activeByType: {} };
   }
 }
 
 function saveWalletState(state: WalletState) {
   saveJson(STATE_FILE, state);
+}
+
+function inferWalletType(id: string, state: WalletState): WalletType {
+  if (state.wallets[id]?.preferredType) return state.wallets[id].preferredType!;
+  if (id.startsWith("evm_")) return "evm";
+  return "tron";
+}
+
+function getWalletIds(): string[] {
+  const provider = getProvider("tron");
+  return provider.listWallets().map(([id]) => id);
 }
 
 function toAgentNetwork(value: NetworkKey | WalletType | string) {
@@ -259,9 +277,22 @@ function ensureDefaultWalletId() {
   const provider = getProvider("tron");
   const wallets = provider.listWallets();
   const activeId = provider.getActiveId();
-  if (activeId) return activeId;
+  if (activeId) {
+    const state = getWalletState();
+    state.activeByType = state.activeByType || {};
+    if (!state.activeByType.tron) state.activeByType.tron = activeId;
+    if (!state.activeByType.evm) state.activeByType.evm = activeId;
+    saveWalletState(state);
+    return activeId;
+  }
   if (wallets.length > 0) {
     provider.setActive(wallets[0][0]);
+    const fallbackId = wallets[0][0];
+    const state = getWalletState();
+    state.activeByType = state.activeByType || {};
+    if (!state.activeByType.tron) state.activeByType.tron = fallbackId;
+    if (!state.activeByType.evm) state.activeByType.evm = fallbackId;
+    saveWalletState(state);
     return wallets[0][0];
   }
 
@@ -281,8 +312,33 @@ function ensureDefaultWalletId() {
     createdAt: now,
     updatedAt: now,
   };
+  state.activeByType = state.activeByType || {};
+  state.activeByType.tron = walletId;
+  state.activeByType.evm = walletId;
   saveWalletState(state);
   return walletId;
+}
+
+function getSelectedWalletId(walletType: WalletType): string {
+  const state = getWalletState();
+  const walletIds = getWalletIds();
+  const selected = state.activeByType?.[walletType];
+  if (selected && walletIds.includes(selected)) return selected;
+
+  if (walletIds.length === 0) {
+    const created = ensureDefaultWalletId();
+    const refreshedState = getWalletState();
+    refreshedState.activeByType = refreshedState.activeByType || {};
+    refreshedState.activeByType[walletType] = created;
+    saveWalletState(refreshedState);
+    return created;
+  }
+
+  const fallback = walletIds[0];
+  state.activeByType = state.activeByType || {};
+  state.activeByType[walletType] = fallback;
+  saveWalletState(state);
+  return fallback;
 }
 
 function resolveAddresses(walletId: string) {
@@ -306,13 +362,13 @@ function getBrowserSigner() {
 }
 
 export function initializeWalletStore() {
-  const walletId = ensureDefaultWalletId();
+  ensureDefaultWalletId();
   const tron = getConfiguredWallet("tron");
   const evm = getConfiguredWallet("eth");
   return {
     dir: WALLET_DIR,
-    tron: { id: walletId, address: tron.address },
-    evm: { id: walletId, address: evm.address },
+    tron: { id: tron.id, address: tron.address },
+    evm: { id: evm.id, address: evm.address },
   };
 }
 
@@ -432,7 +488,9 @@ export function assertWalletReadyForWrite(network: NetworkKey) {
 export function listWallets(): WalletInfo[] {
   const provider = getProvider("tron");
   const state = getWalletState();
-  const activeId = ensureDefaultWalletId();
+  ensureDefaultWalletId();
+  const activeTronId = getSelectedWalletId("tron");
+  const activeEvmId = getSelectedWalletId("evm");
   const wallets = provider.listWallets();
 
   return wallets.map(([id]) => {
@@ -448,7 +506,9 @@ export function listWallets(): WalletInfo[] {
       evmAddress: addresses.evmAddress,
       createdAt: meta?.createdAt || "",
       updatedAt: meta?.updatedAt || "",
-      isActive: id === activeId,
+      isActiveTron: id === activeTronId,
+      isActiveEvm: id === activeEvmId,
+      isActive: id === activeTronId || id === activeEvmId,
     };
   });
 }
@@ -500,11 +560,11 @@ export function importWallet(params: {
     createdAt: now,
     updatedAt: now,
   };
-  saveWalletState(state);
-
-  if (!provider.getActiveId()) {
-    provider.setActive(walletId);
+  state.activeByType = state.activeByType || {};
+  if (!state.activeByType[params.walletType]) {
+    state.activeByType[params.walletType] = walletId;
   }
+  saveWalletState(state);
 
   return {
     id: walletId,
@@ -513,7 +573,7 @@ export function importWallet(params: {
     source: state.wallets[walletId].source,
     createdAt: now,
     updatedAt: now,
-    isActive: provider.getActiveId() === walletId,
+    isActive: state.activeByType[params.walletType] === walletId,
     imported: true,
     message: `Imported ${params.walletType} wallet ${derived.address}.`,
   };
@@ -539,6 +599,10 @@ export function generateWallet(walletType: WalletType) {
     createdAt: now,
     updatedAt: now,
   };
+  state.activeByType = state.activeByType || {};
+  if (!state.activeByType[walletType]) {
+    state.activeByType[walletType] = walletId;
+  }
   saveWalletState(state);
 
   return {
@@ -548,24 +612,47 @@ export function generateWallet(walletType: WalletType) {
     source: "generated" as const,
     createdAt: now,
     updatedAt: now,
-    isActive: provider.getActiveId() === walletId,
+    isActive: state.activeByType[walletType] === walletId,
     message: `Generated ${walletType} wallet ${generated.address}.`,
   };
 }
 
-export function setActiveWallet(id: string) {
-  const provider = getProvider("tron");
-  provider.setActive(id);
+export function setActiveWallet(id: string, walletType?: WalletType) {
+  if (id === "browser:tronlink") {
+    const mode = setWalletMode("browser", "tron");
+    return {
+      id,
+      type: "browser",
+      address: mode.address,
+      source: "browser_wallet",
+      isActive: true,
+      activeFor: "tron",
+      message: "Activated browser wallet for TRON signing.",
+    };
+  }
+
+  const walletIds = getWalletIds();
+  if (!walletIds.includes(id)) {
+    throw new Error(`Wallet ${id} not found in local wallet store.`);
+  }
+
   const state = getWalletState();
+  const targetType = walletType || inferWalletType(id, state);
+  const provider = getProvider(toAgentNetwork(targetType));
+  provider.setActive(id);
+  state.activeByType = state.activeByType || {};
+  state.activeByType[targetType] = id;
   const meta = state.wallets[id];
+  saveWalletState(state);
   const addresses = resolveAddresses(id);
   return {
     id,
-    type: meta?.preferredType || "tron",
-    address: meta?.preferredType === "evm" ? addresses.evmAddress : addresses.tronAddress,
+    type: targetType,
+    address: targetType === "evm" ? addresses.evmAddress : addresses.tronAddress,
     source: meta?.source || "external",
     isActive: true,
-    message: `Activated wallet ${id}.`,
+    activeFor: targetType,
+    message: `Activated wallet ${id} for ${targetType}.`,
   };
 }
 
@@ -583,8 +670,8 @@ export function getConfiguredWallet(network: NetworkKey): ConfiguredWallet {
     }
   }
 
-  const walletId = ensureDefaultWalletId();
   const walletType = getWalletTypeForNetwork(network);
+  const walletId = getSelectedWalletId(walletType);
   const privateKey = readPrivateKeyFromConfig(walletId, walletType);
   const address = deriveAddressFromPrivateKey(privateKey, walletType);
   return {

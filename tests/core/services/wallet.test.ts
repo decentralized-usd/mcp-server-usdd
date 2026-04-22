@@ -88,4 +88,26 @@ describe("wallet store", () => {
     expect(() => wallet.assertWalletReadyForWrite("tron")).not.toThrow();
   }, 20_000);
 
+  it("tracks active wallets independently for tron and evm", async () => {
+    const wallet = await import("../../../src/core/services/wallet.js");
+    wallet.initializeWalletStore();
+
+    const importedTron = await wallet.importWallet({
+      walletType: "tron",
+      secretType: "private_key",
+      secret: TRON_PRIVATE_KEY,
+    });
+    const importedEvm = await wallet.importWallet({
+      walletType: "evm",
+      secretType: "private_key",
+      secret: EVM_PRIVATE_KEY,
+    });
+
+    await wallet.setActiveWallet(importedTron.id, "tron");
+    await wallet.setActiveWallet(importedEvm.id, "evm");
+
+    expect(wallet.getWalletAddress("tron")).toBe(importedTron.address);
+    expect(wallet.getWalletAddress("eth")).toBe(importedEvm.address);
+  }, 20_000);
+
 });

@@ -268,6 +268,7 @@ describe("registerUsddTools", () => {
     const result = await runTool(server, "list_wallets");
     expect(result.json.walletStore).toBe("/tmp/.agent-wallet");
     expect(result.json.mode).toBe("agent");
+    expect(result.json.signingModes).toEqual({ tron: "agent", evm: "agent" });
     expect(result.json.wallets).toHaveLength(1);
   });
 
@@ -285,6 +286,7 @@ describe("registerUsddTools", () => {
     const result = await runTool(server, "list_wallets");
 
     expect(result.json.mode).toBe("browser");
+    expect(result.json.signingModes).toEqual({ tron: "browser", evm: "agent" });
     expect(result.json.wallets[0].id).toBe("browser:tronlink");
     expect(result.json.wallets[0].address).toBe("TBrowser");
     expect(result.json.wallets).toHaveLength(2);
@@ -308,7 +310,7 @@ describe("registerUsddTools", () => {
       secret: "0xabc",
       index: undefined,
     });
-    expect(servicesMock.setActiveWallet).toHaveBeenCalledWith("evm_1");
+    expect(servicesMock.setActiveWallet).toHaveBeenCalledWith("evm_1", undefined);
     expect(imported.json.id).toBe("evm_1");
     expect(activated.json.isActive).toBe(true);
   });

@@ -78,11 +78,11 @@ describe("wallet store", () => {
     expect(configured.privateKey).toBe(EVM_PRIVATE_KEY);
   }, 20_000);
 
-  it("prompts once before first TRON write in each session", async () => {
+  it("prompts once before first TRON wallet operation in each session", async () => {
     const wallet = await import("../../../src/core/services/wallet.js");
     wallet.initializeWalletStore();
 
-    expect(() => wallet.assertWalletReadyForWrite("tron")).toThrow(/Before your first TRON write in this Claude session/i);
+    expect(() => wallet.assertWalletReadyForWrite("tron")).toThrow(/Before any TRON wallet operation in this session/i);
     expect(() => wallet.assertWalletReadyForWrite("tron")).not.toThrow();
     expect(() => wallet.assertWalletReadyForWrite("tron")).not.toThrow();
   }, 20_000);
@@ -104,6 +104,10 @@ describe("wallet store", () => {
 
     await wallet.setActiveWallet(importedTron.id, "tron");
     await wallet.setActiveWallet(importedEvm.id, "evm");
+
+    // Advance the once-per-session TRON mode gate so that getWalletAddress
+    // calls below do not fire the confirmation prompt.
+    expect(() => wallet.assertTronModeConfirmed("tron")).toThrow(/Before any TRON wallet operation in this session/i);
 
     expect(wallet.getWalletAddress("tron")).toBe(importedTron.address);
     expect(wallet.getWalletAddress("eth")).toBe(importedEvm.address);

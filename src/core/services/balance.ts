@@ -2,7 +2,7 @@ import { type NetworkKey } from "../chains.js";
 import { getNetworkConfig } from "../chains.js";
 import { getPublicClient } from "./clients.js";
 import { utils } from "./utils.js";
-import { getConfiguredWallet } from "./wallet.js";
+import { assertTronModeConfirmed, getConfiguredWallet } from "./wallet.js";
 
 /**
  * Get TRX balance for an address.
@@ -27,6 +27,7 @@ export async function getNativeBalance(params: {
   owner?: string;
 }) {
   const config = getNetworkConfig(params.network);
+  if (!params.owner) assertTronModeConfirmed(params.network);
   const owner = params.owner || getConfiguredWallet(params.network).address;
 
   if (config.kind === "tron") {

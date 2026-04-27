@@ -68,7 +68,7 @@ const WALLET_DIR = process.env.AGENT_WALLET_DIR || join(homedir(), ".agent-walle
 const STATE_FILE = join(WALLET_DIR, "usdd-wallet-state.json");
 const MASTER_FILE = join(WALLET_DIR, "master.json");
 let activeWalletMode: WalletMode = "agent";
-let tronWriteModePromptedThisSession = false;
+let tronModePromptedThisSession = false;
 let browserSigner: TronWalletSigner | null = null;
 
 function ensureDir(path: string) {
@@ -456,20 +456,24 @@ export function getConnectedBrowserWalletAddress(): string | null {
   return getBrowserSigner().getConnectedAddress();
 }
 
-export function assertWalletReadyForWrite(network: NetworkKey) {
+export function assertTronModeConfirmed(network: NetworkKey) {
   const config = getNetworkConfig(network);
-  const browserAddress = getBrowserSigner().getConnectedAddress();
-
-  // Prompt once per MCP session before the first TRON write.
-  if (config.kind === "tron" && !tronWriteModePromptedThisSession) {
-    tronWriteModePromptedThisSession = true;
+  if (config.kind === "tron" && !tronModePromptedThisSession) {
+    tronModePromptedThisSession = true;
     throw new Error(
-      "Before your first TRON write in this Claude session, confirm signing mode:\n" +
+      "Before any TRON wallet operation in this session, confirm signing mode:\n" +
       "Current default mode: agent.\n" +
       "Option A (Recommended): connect_browser_wallet (TronLink/browser signing)\n" +
-      "Option B: keep current mode (agent) and retry the write.",
+      "Option B: keep current mode (agent) and retry the operation.",
     );
   }
+}
+
+export function assertWalletReadyForWrite(network: NetworkKey) {
+  assertTronModeConfirmed(network);
+
+  const config = getNetworkConfig(network);
+  const browserAddress = getBrowserSigner().getConnectedAddress();
 
   if (activeWalletMode === "browser" && config.kind === "tron" && !browserAddress) {
     throw new Error(
@@ -677,6 +681,7 @@ export function getConfiguredWallet(network: NetworkKey): ConfiguredWallet {
 }
 
 export function getWalletAddress(network: NetworkKey): string {
+  assertTronModeConfirmed(network);
   return getConfiguredWallet(network).address;
 }
 

@@ -3,7 +3,7 @@ import { getIlkConfig, getNetworkConfig, type NetworkKey } from "../chains.js";
 import { ensureProxy, executeProxyAction, getProxyAddress, readContract } from "./contracts.js";
 import { approveToken } from "./tokens.js";
 import { utils } from "./utils.js";
-import { getConfiguredWallet } from "./wallet.js";
+import { assertTronModeConfirmed, getConfiguredWallet } from "./wallet.js";
 
 const CLOSE_VAULT_APPROVAL_BUFFER = utils.parseUnits("0.0001", 18);
 
@@ -105,6 +105,7 @@ async function ensureUsddApprovalToProxy(network: NetworkKey, requiredRaw: bigin
 
 export async function getUserVaultIds(network: NetworkKey, address?: string): Promise<bigint[]> {
   const config = getNetworkConfig(network);
+  if (!address) assertTronModeConfirmed(network);
   const owner = address || await getProxyAddress(network, false);
   if (!owner) return [];
   const count = BigInt((await readContract({ network, address: config.cdpManager, abi: CDP_MANAGER_ABI, functionName: "count", args: [owner] })).toString());

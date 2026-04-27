@@ -461,10 +461,11 @@ export function assertTronModeConfirmed(network: NetworkKey) {
   if (config.kind === "tron" && !tronModePromptedThisSession) {
     tronModePromptedThisSession = true;
     throw new Error(
-      "Before any TRON wallet operation in this session, confirm signing mode:\n" +
-      "Current default mode: agent.\n" +
-      "Option A (Recommended): connect_browser_wallet (TronLink/browser signing)\n" +
-      "Option B: keep current mode (agent) and retry the operation.",
+      "TRON wallet signing mode has not been confirmed yet.\n" +
+      "IMPORTANT: Do NOT auto-select a mode. You MUST ask the user which option they prefer before proceeding:\n" +
+      "  Option A (Recommended): Browser wallet — call connect_browser_wallet to sign via TronLink. Private keys never leave the browser.\n" +
+      "  Option B: Agent wallet — call set_wallet_mode with mode='agent'. Encrypted key stored locally in ~/.agent-wallet/.\n" +
+      "Wait for the user's explicit choice before retrying.",
     );
   }
 }

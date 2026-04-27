@@ -82,7 +82,7 @@ describe("wallet store", () => {
     const wallet = await import("../../../src/core/services/wallet.js");
     wallet.initializeWalletStore();
 
-    expect(() => wallet.assertWalletReadyForWrite("tron")).toThrow(/Before any TRON wallet operation in this session/i);
+    expect(() => wallet.assertWalletReadyForWrite("tron")).toThrow(/TRON wallet signing mode has not been confirmed/i);
     expect(() => wallet.assertWalletReadyForWrite("tron")).not.toThrow();
     expect(() => wallet.assertWalletReadyForWrite("tron")).not.toThrow();
   }, 20_000);
@@ -107,7 +107,7 @@ describe("wallet store", () => {
 
     // Advance the once-per-session TRON mode gate so that getWalletAddress
     // calls below do not fire the confirmation prompt.
-    expect(() => wallet.assertTronModeConfirmed("tron")).toThrow(/Before any TRON wallet operation in this session/i);
+    expect(() => wallet.assertTronModeConfirmed("tron")).toThrow(/TRON wallet signing mode has not been confirmed/i);
 
     expect(wallet.getWalletAddress("tron")).toBe(importedTron.address);
     expect(wallet.getWalletAddress("eth")).toBe(importedEvm.address);

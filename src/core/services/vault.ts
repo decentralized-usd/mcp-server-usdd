@@ -1,4 +1,4 @@
-import { CDP_MANAGER_ABI, DOG_ABI, DSS_PROXY_ACTIONS_ABI, ERC20_ABI, JUG_ABI, SPOT_ABI, VAT_ABI } from "../abis.js";
+import { CDP_MANAGER_ABI, DOG_ABI, DSS_PROXY_ACTIONS_ABI, ERC20_ABI, JUG_ABI, PROXY_REGISTRY_ABI, SPOT_ABI, VAT_ABI } from "../abis.js";
 import { getIlkConfig, getNetworkConfig, type NetworkKey } from "../chains.js";
 import { ensureProxy, executeProxyAction, getProxyAddress, readContract } from "./contracts.js";
 import { approveToken } from "./tokens.js";
@@ -103,11 +103,33 @@ async function ensureUsddApprovalToProxy(network: NetworkKey, requiredRaw: bigin
   };
 }
 
+async function getProxyForAddress(network: NetworkKey, walletAddress: string): Promise<string | null> {
+  const config = getNetworkConfig(network);
+  const existing = await readContract({
+    network,
+    address: config.proxyRegistry,
+    abi: PROXY_REGISTRY_ABI,
+    functionName: "proxies",
+    args: [walletAddress],
+  });
+  const normalized = utils.normalizeAddress(typeof existing === "string" ? existing : String(existing), network);
+  const empty = config.kind === "tron" ? "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb" : "0x0000000000000000000000000000000000000000";
+  return normalized && normalized !== empty && !/^0x0+$/.test(normalized) ? normalized : null;
+}
+
 export async function getUserVaultIds(network: NetworkKey, address?: string): Promise<bigint[]> {
   const config = getNetworkConfig(network);
-  const localProxy = await getProxyAddress(network, false);
-  const owner = address || localProxy;
-  if (owner === localProxy) assertTronModeConfirmed(network);
+  let owner: string | null;
+  if (address) {
+    // External address: resolve its proxy, then check if it happens to be own wallet
+    const localProxy = await getProxyAddress(network, false);
+    owner = await getProxyForAddress(network, address);
+    if (owner === localProxy) assertTronModeConfirmed(network);
+  } else {
+    // Own wallet: gate BEFORE accessing wallet data
+    assertTronModeConfirmed(network);
+    owner = await getProxyAddress(network, false);
+  }
   if (!owner) return [];
   const count = BigInt((await readContract({ network, address: config.cdpManager, abi: CDP_MANAGER_ABI, functionName: "count", args: [owner] })).toString());
   const first = BigInt((await readContract({ network, address: config.cdpManager, abi: CDP_MANAGER_ABI, functionName: "first", args: [owner] })).toString());
@@ -120,7 +142,20 @@ export async function getUserVaultIds(network: NetworkKey, address?: string): Pr
     const list = await readContract({ network, address: config.cdpManager, abi: CDP_MANAGER_ABI, functionName: "list", args: [current] }) as any;
     current = BigInt((list[1] ?? list.next ?? 0).toString());
   }
-  return ids;
+
+  // For each ilk, keep only the smallest cdpId (same logic as the web UI)
+  const ilkRaws = await Promise.all(
+    ids.map((id) => readContract({ network, address: config.cdpManager, abi: CDP_MANAGER_ABI, functionName: "ilks", args: [id] })),
+  );
+  const minByIlk = new Map<string, bigint>();
+  for (let i = 0; i < ids.length; i++) {
+    const ilkKey = String(ilkRaws[i]);
+    const existing = minByIlk.get(ilkKey);
+    if (existing === undefined || ids[i] < existing) {
+      minByIlk.set(ilkKey, ids[i]);
+    }
+  }
+  return Array.from(minByIlk.values()).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 export async function getVaultSummary(network: NetworkKey, cdpId: bigint) {

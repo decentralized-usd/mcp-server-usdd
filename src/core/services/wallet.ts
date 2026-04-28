@@ -660,8 +660,13 @@ export function setActiveWallet(id: string, walletType?: WalletType) {
 export function getConfiguredWallet(network: NetworkKey): ConfiguredWallet {
   if (activeWalletMode === "browser") {
     const config = getNetworkConfig(network);
-    const browserAddress = getBrowserSigner().getConnectedAddress();
-    if (config.kind === "tron" && browserAddress) {
+    if (config.kind === "tron") {
+      const browserAddress = getBrowserSigner().getConnectedAddress();
+      if (!browserAddress) {
+        throw new Error(
+          "Browser wallet is no longer connected. Call connect_browser_wallet to reconnect before retrying.",
+        );
+      }
       return {
         id: `browser:${network}`,
         type: getWalletTypeForNetwork(network),
@@ -696,6 +701,25 @@ export async function signTransactionWithWallet(unsignedTx: any, network: Networ
 
   if (activeWalletMode === "browser") {
     const signer = getBrowserSigner();
+    const connectedAddress = signer.getConnectedAddress();
+
+    // Verify the transaction's owner_address matches the connected browser wallet
+    const rawOwnerHex: string | undefined =
+      unsignedTx?.raw_data?.contract?.[0]?.parameter?.value?.owner_address;
+    if (rawOwnerHex && connectedAddress) {
+      const toBase58 = (addr: string) => {
+        try { return addr.startsWith("41") ? TronWeb.address.fromHex(addr) : addr; } catch { return addr; }
+      };
+      const normalizedTxOwner = toBase58(rawOwnerHex);
+      const normalizedConnected = toBase58(connectedAddress);
+      if (normalizedTxOwner && normalizedConnected && normalizedTxOwner !== normalizedConnected) {
+        throw new Error(
+          `Address mismatch: the transaction is built for ${normalizedConnected} but TronLink's active account appears to be different.\n` +
+          `Please switch TronLink to account ${normalizedConnected} before signing.`,
+        );
+      }
+    }
+
     const { signedTransaction } = await signer.signTransaction(unsignedTx, toBrowserNetwork(network));
     if (signedTransaction && signedTransaction.signature) {
       return { ...unsignedTx, signature: signedTransaction.signature };

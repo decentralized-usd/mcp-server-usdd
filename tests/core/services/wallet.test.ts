@@ -78,11 +78,16 @@ describe("wallet store", () => {
     expect(configured.privateKey).toBe(EVM_PRIVATE_KEY);
   }, 20_000);
 
-  it("prompts once before first TRON wallet operation in each session", async () => {
+  it("keeps prompting until the user explicitly confirms wallet mode", async () => {
     const wallet = await import("../../../src/core/services/wallet.js");
     wallet.initializeWalletStore();
 
-    expect(() => wallet.assertWalletReadyForWrite("tron")).toThrow(/TRON wallet signing mode has not been confirmed/i);
+    // Throws every time until mode is confirmed
+    expect(() => wallet.assertWalletReadyForWrite("tron")).toThrow(/STOP.*TRON wallet signing mode/i);
+    expect(() => wallet.assertWalletReadyForWrite("tron")).toThrow(/STOP.*TRON wallet signing mode/i);
+
+    // Once user picks a mode, gate clears
+    wallet.setWalletMode("agent");
     expect(() => wallet.assertWalletReadyForWrite("tron")).not.toThrow();
     expect(() => wallet.assertWalletReadyForWrite("tron")).not.toThrow();
   }, 20_000);
@@ -105,9 +110,8 @@ describe("wallet store", () => {
     await wallet.setActiveWallet(importedTron.id, "tron");
     await wallet.setActiveWallet(importedEvm.id, "evm");
 
-    // Advance the once-per-session TRON mode gate so that getWalletAddress
-    // calls below do not fire the confirmation prompt.
-    expect(() => wallet.assertTronModeConfirmed("tron")).toThrow(/TRON wallet signing mode has not been confirmed/i);
+    // Confirm wallet mode so that getWalletAddress calls below do not fire the prompt.
+    wallet.setWalletMode("agent");
 
     expect(wallet.getWalletAddress("tron")).toBe(importedTron.address);
     expect(wallet.getWalletAddress("eth")).toBe(importedEvm.address);

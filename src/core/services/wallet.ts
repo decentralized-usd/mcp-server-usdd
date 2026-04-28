@@ -68,7 +68,7 @@ const WALLET_DIR = process.env.AGENT_WALLET_DIR || join(homedir(), ".agent-walle
 const STATE_FILE = join(WALLET_DIR, "usdd-wallet-state.json");
 const MASTER_FILE = join(WALLET_DIR, "master.json");
 let activeWalletMode: WalletMode = "agent";
-let tronModePromptedThisSession = false;
+let tronModeConfirmedThisSession = false;
 let browserSigner: TronWalletSigner | null = null;
 
 function ensureDir(path: string) {
@@ -402,6 +402,7 @@ export async function connectBrowserWallet(params?: { network?: NetworkKey; addr
   });
 
   activeWalletMode = "browser";
+  tronModeConfirmedThisSession = true;
   return {
     mode: activeWalletMode,
     network,
@@ -424,6 +425,7 @@ export function setWalletMode(mode: WalletMode, network?: NetworkKey) {
     }
   }
   activeWalletMode = mode;
+  tronModeConfirmedThisSession = true;
   return getWalletMode(network);
 }
 
@@ -458,14 +460,14 @@ export function getConnectedBrowserWalletAddress(): string | null {
 
 export function assertTronModeConfirmed(network: NetworkKey) {
   const config = getNetworkConfig(network);
-  if (config.kind === "tron" && !tronModePromptedThisSession) {
-    tronModePromptedThisSession = true;
+  if (config.kind === "tron" && !tronModeConfirmedThisSession) {
     throw new Error(
-      "TRON wallet signing mode has not been confirmed yet.\n" +
-      "IMPORTANT: Do NOT auto-select a mode. You MUST ask the user which option they prefer before proceeding:\n" +
-      "  Option A (Recommended): Browser wallet — call connect_browser_wallet to sign via TronLink. Private keys never leave the browser.\n" +
-      "  Option B: Agent wallet — call set_wallet_mode with mode='agent'. Encrypted key stored locally in ~/.agent-wallet/.\n" +
-      "Wait for the user's explicit choice before retrying.",
+      "⛔ STOP — TRON wallet signing mode has not been confirmed for this session.\n" +
+      "Do NOT call any other tools. Do NOT query any balances, addresses, or chain data.\n" +
+      "You MUST immediately present the following choice to the user and wait for their response:\n\n" +
+      "  Option A (Recommended): Browser wallet — call connect_browser_wallet. Signs via TronLink; private keys never leave the browser.\n" +
+      "  Option B: Agent wallet — call set_wallet_mode with mode='agent'. Encrypted key stored in ~/.agent-wallet/.\n\n" +
+      "Do not proceed with any operation until the user explicitly picks an option.",
     );
   }
 }

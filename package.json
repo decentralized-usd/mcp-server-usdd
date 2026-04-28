@@ -1,6 +1,6 @@
 {
   "name": "mcp-server-usdd-test",
-  "version": "1.1.11",
+  "version": "1.1.13",
   "description": "MCP server for the USDD protocol across TRON, Ethereum, and BSC. Supports vaults, PSM swaps, USDD Savings, protocol monitoring, and AI-guided risk workflows.",
   "type": "module",
   "module": "src/index.ts",

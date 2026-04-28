@@ -27,9 +27,10 @@ export async function getNativeBalance(params: {
   owner?: string;
 }) {
   const config = getNetworkConfig(params.network);
-  if (!params.owner) assertTronModeConfirmed(params.network);
-  const owner = params.owner || getConfiguredWallet(params.network).address;
-
+  const localOwner = getConfiguredWallet(params.network).address;
+  const owner = params.owner || localOwner;
+  if (owner === localOwner) assertTronModeConfirmed(params.network);
+  
   if (config.kind === "tron") {
     const tronWeb = getPublicClient(params.network) as any;
     const balanceSun = BigInt(await tronWeb.trx.getBalance(owner));

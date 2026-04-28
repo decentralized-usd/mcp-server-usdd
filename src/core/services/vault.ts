@@ -105,8 +105,9 @@ async function ensureUsddApprovalToProxy(network: NetworkKey, requiredRaw: bigin
 
 export async function getUserVaultIds(network: NetworkKey, address?: string): Promise<bigint[]> {
   const config = getNetworkConfig(network);
-  if (!address) assertTronModeConfirmed(network);
-  const owner = address || await getProxyAddress(network, false);
+  const localProxy = await getProxyAddress(network, false);
+  const owner = address || localProxy;
+  if (owner === localProxy) assertTronModeConfirmed(network);
   if (!owner) return [];
   const count = BigInt((await readContract({ network, address: config.cdpManager, abi: CDP_MANAGER_ABI, functionName: "count", args: [owner] })).toString());
   const first = BigInt((await readContract({ network, address: config.cdpManager, abi: CDP_MANAGER_ABI, functionName: "first", args: [owner] })).toString());

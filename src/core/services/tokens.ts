@@ -77,8 +77,9 @@ export async function getTokenBalance(params: {
   owner?: string;
   decimals?: number;
 }) {
-  if (!params.owner) assertTronModeConfirmed(params.network);
-  const owner = params.owner || getConfiguredWallet(params.network).address;
+  const localOwner = getConfiguredWallet(params.network).address;
+  const owner = params.owner || localOwner;
+  if (owner === localOwner) assertTronModeConfirmed(params.network);
   const [decimalsRaw, balanceRaw, symbol, name] = await Promise.all([
     params.decimals ?? Number(await readContract({
       network: params.network,
@@ -129,8 +130,9 @@ export async function checkAllowance(params: {
   amount?: string;
   decimals?: number;
 }) {
-  if (!params.owner) assertTronModeConfirmed(params.network);
-  const owner = params.owner || getConfiguredWallet(params.network).address;
+  const localOwner = getConfiguredWallet(params.network).address;
+  const owner = params.owner || localOwner;
+  if (owner === localOwner) assertTronModeConfirmed(params.network);
   const [decimalsRaw, allowanceRaw, symbol, name] = await Promise.all([
     params.decimals ?? Number(await readContract({
       network: params.network,

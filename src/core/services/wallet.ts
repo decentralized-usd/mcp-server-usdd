@@ -721,9 +721,31 @@ export async function signTransactionWithWallet(unsignedTx: any, network: Networ
     }
 
     const { signedTransaction } = await signer.signTransaction(unsignedTx, toBrowserNetwork(network));
-    if (signedTransaction && signedTransaction.signature) {
-      return { ...unsignedTx, signature: signedTransaction.signature };
+
+    // 签名后校验：检测 TronLink 是否用了不同账户（如用户在弹窗中选择了"自定义授权"时可能切换账户）
+    if (signedTransaction) {
+      const returnedOwnerHex: string | undefined =
+        signedTransaction?.raw_data?.contract?.[0]?.parameter?.value?.owner_address;
+      if (returnedOwnerHex && connectedAddress) {
+        const toBase58 = (addr: string) => {
+          try { return addr.startsWith("41") ? TronWeb.address.fromHex(addr) : addr; } catch { return addr; }
+        };
+        const returnedOwner = toBase58(String(returnedOwnerHex));
+        const normalizedConnected = toBase58(connectedAddress);
+        if (returnedOwner && normalizedConnected && returnedOwner !== normalizedConnected) {
+          // 更新缓存地址，让用户下次重试时能正常匹配
+          signer.updateConnectedAddress(returnedOwner);
+          throw new Error(
+            `TronLink 使用了不同的账户签名（可能选择了"自定义授权"切换了账户）。\n` +
+            `期望账户: ${normalizedConnected}\n` +
+            `实际使用: ${returnedOwner}\n` +
+            `活跃钱包已更新为 ${returnedOwner}，请重新执行操作。`,
+          );
+        }
+      }
     }
+
+    // 返回 TronLink 完整签名后的交易（包含其可能的修改），而非合并 signature 到原始 tx
     return signedTransaction;
   }
 

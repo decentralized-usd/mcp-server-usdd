@@ -31,6 +31,10 @@ export class TronWalletSigner {
     return this.connectedAddress;
   }
 
+  updateConnectedAddress(address: string): void {
+    this.connectedAddress = address;
+  }
+
   async connectWallet(options?: { address?: string; network?: TronNetwork }): Promise<ConnectResult> {
     await this.start();
     const { address } = await this.signer.connectWallet(options?.network);

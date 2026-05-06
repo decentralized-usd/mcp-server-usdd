@@ -46,20 +46,12 @@ export async function approveToken(params: {
   amount: string;
   decimals?: number;
 }) {
-  const rawDecimals = params.decimals ?? Number(await readContract({
+  const decimals = params.decimals ?? Number(await readContract({
     network: params.network,
     address: params.token,
     abi: ERC20_ABI,
     functionName: "decimals",
   }));
-  if (!Number.isFinite(rawDecimals) || rawDecimals < 1 || rawDecimals > 30) {
-    throw new Error(
-      `无法读取代币精度 (decimals=${rawDecimals})。` +
-      `请确认 token 地址 ${params.token} 是标准 ERC20/TRC20 合约，` +
-      `或通过 decimals 参数手动指定（如 USDT 为 6）。`,
-    );
-  }
-  const decimals = Math.trunc(rawDecimals);
   await assertProtocolSpender(params.network, params.spender);
   const raw = params.amount === "max" ? BigInt(MAX_UINT256) : utils.parseUnits(params.amount, decimals);
   const result = await writeContract({
@@ -116,10 +108,7 @@ export async function getTokenBalance(params: {
     }),
   ]);
 
-  const rawDecimals = Number(decimalsRaw);
-  const decimals = Number.isFinite(rawDecimals) && rawDecimals >= 0 && rawDecimals <= 30
-    ? Math.trunc(rawDecimals)
-    : 0;
+  const decimals = Number(decimalsRaw);
   const balance = BigInt(balanceRaw.toString());
   return {
     network: params.network,
@@ -172,10 +161,7 @@ export async function checkAllowance(params: {
     }),
   ]);
 
-  const rawDecimals = Number(decimalsRaw);
-  const decimals = Number.isFinite(rawDecimals) && rawDecimals >= 0 && rawDecimals <= 30
-    ? Math.trunc(rawDecimals)
-    : 0;
+  const decimals = Number(decimalsRaw);
   const allowance = BigInt(allowanceRaw.toString());
   const requiredRaw = params.amount ? utils.parseUnits(params.amount, decimals) : null;
   return {

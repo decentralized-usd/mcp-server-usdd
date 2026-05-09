@@ -291,19 +291,41 @@ export async function depositAndMint(params: {
       return { ...result, reused: true, message: `Added ${params.collateralAmount} collateral and minted ${params.drawAmount} USDD into existing ${ilkConfig.key} vault ${existingCdpId}.` };
     }
 
-    const fn = ilkConfig.kind === "native" ? "openLockTRXAndDraw" : "openLockGemAndDraw";
-    const args = ilkConfig.kind === "native"
-      ? [config.cdpManager, config.jug, ilkConfig.join, config.usddJoin, utils.toBytes32(ilkConfig.key), draw]
-      : [config.cdpManager, config.jug, ilkConfig.join, config.usddJoin, utils.toBytes32(ilkConfig.key), collateral, draw, params.transferFrom ?? true];
-    const result = await executeProxyAction({
+    // 先单独 open 一个新仓位
+    const proxy = await ensureProxy(params.network);
+    const openResult = await executeProxyAction({
+      network: params.network,
+      target: config.proxyActions,
+      targetAbi: DSS_PROXY_ACTIONS_ABI,
+      functionName: "open",
+      args: [config.cdpManager, utils.toBytes32(ilkConfig.key), proxy],
+    });
+
+    // open 完成后查询新建的 cdpId
+    const newCdpId = await findExistingVaultForIlk(params.network, ilkConfig.key);
+    if (newCdpId === null) {
+      throw new Error(`Opened ${ilkConfig.key} vault (tx ${openResult.txID}) but failed to locate the new CDP id. Please query get_user_vaults and retry with cdpId.`);
+    }
+
+    // 再单独 lockGemAndDraw / lockTRXAndDraw
+    const fn = ilkConfig.kind === "native" ? "lockTRXAndDraw" : "lockGemAndDraw";
+    const lockArgs = ilkConfig.kind === "native"
+      ? [config.cdpManager, config.jug, ilkConfig.join, config.usddJoin, newCdpId, draw]
+      : [config.cdpManager, config.jug, ilkConfig.join, config.usddJoin, newCdpId, collateral, draw, params.transferFrom ?? true];
+    const lockResult = await executeProxyAction({
       network: params.network,
       target: config.proxyActions,
       targetAbi: DSS_PROXY_ACTIONS_ABI,
       functionName: fn,
-      args,
+      args: lockArgs,
       value: ilkConfig.kind === "native" ? collateral : undefined,
     });
-    return { ...result, message: `Opened and funded ${ilkConfig.key} vault with ${params.collateralAmount} collateral and ${params.drawAmount} USDD debt.` };
+    return {
+      ...lockResult,
+      openTxID: openResult.txID,
+      cdpId: newCdpId.toString(),
+      message: `Opened new ${ilkConfig.key} vault (cdpId=${newCdpId}, openTx=${openResult.txID}), then deposited ${params.collateralAmount} collateral and minted ${params.drawAmount} USDD (depositTx=${lockResult.txID}).`,
+    };
   }
 
   await assertVaultOwnedByCurrentProxy(params.network, params.cdpId);

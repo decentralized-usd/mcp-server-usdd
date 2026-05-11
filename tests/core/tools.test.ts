@@ -15,6 +15,15 @@ const servicesMock = vi.hoisted(() => {
     getWalletStorePath: vi.fn(),
     importWallet: vi.fn(),
     setActiveWallet: vi.fn(),
+    connectBrowserWallet: vi.fn(),
+    setWalletMode: vi.fn(),
+    getWalletMode: vi.fn(),
+    getConnectedBrowserWalletAddress: vi.fn(),
+    setGlobalNetwork: vi.fn(),
+    getGlobalNetwork: vi.fn(),
+    getGlobalNetworks: vi.fn(),
+    getNetworkAlias: vi.fn(),
+    getNetworkProfile: vi.fn(),
     getProtocolOverview: vi.fn(),
     getOracleStatus: vi.fn(),
     getPsmStatus: vi.fn(),
@@ -24,6 +33,7 @@ const servicesMock = vi.hoisted(() => {
     analyzeVaultRisk: vi.fn(),
     getSavingsStatus: vi.fn(),
     openVault: vi.fn(),
+    getNativeBalance: vi.fn(),
     getTokenBalance: vi.fn(),
     checkAllowance: vi.fn(),
     approveToken: vi.fn(),
@@ -74,12 +84,41 @@ describe("registerUsddTools", () => {
         value.mockReset();
       }
     });
+    servicesMock.getGlobalNetwork.mockReturnValue("tron");
+    servicesMock.getGlobalNetworks.mockReturnValue({
+      tron: "tron",
+      eth: "eth",
+      bsc: "bsc",
+    });
+    servicesMock.getWalletMode.mockReturnValue({
+      mode: "agent",
+      network: "tron",
+      address: "TWallet",
+      browserConnected: false,
+    });
+    servicesMock.getConnectedBrowserWalletAddress.mockReturnValue(null);
+    servicesMock.getNetworkAlias.mockImplementation((network: string) => network === "tron" ? "mainnet" : network);
+    servicesMock.getNetworkProfile.mockImplementation((network: string) => ({
+      network,
+      alias: network,
+      family: "tron",
+      options: {
+        tron: ["tron_mainnet", "tron_nile"],
+        eth: ["eth_mainnet", "eth_sepolia"],
+        bsc: ["bsc_mainnet", "bsc_testnet"],
+      },
+    }));
   });
 
   it("registers the expected core tools", () => {
     const server = createServer();
     expect(Object.keys(server._registeredTools)).toEqual([
       "get_supported_networks",
+      "connect_browser_wallet",
+      "set_wallet_mode",
+      "get_wallet_mode",
+      "set_network",
+      "get_network",
       "get_wallet_address",
       "list_wallets",
       "import_wallet",
@@ -93,6 +132,7 @@ describe("registerUsddTools", () => {
       "analyze_vault_risk",
       "get_savings_status",
       "open_vault",
+      "get_native_balance",
       "get_token_balance",
       "check_allowance",
       "approve_token",
@@ -112,9 +152,84 @@ describe("registerUsddTools", () => {
     const server = createServer();
     const result = await runTool(server, "get_supported_networks");
     expect(result.json).toEqual({
-      networks: ["tron", "eth", "bsc"],
+      networks: ["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"],
       default: "tron",
     });
+  });
+
+  it("supports wallet mode and global network tools", async () => {
+    servicesMock.connectBrowserWallet.mockReturnValue({ mode: "browser", address: "TBrowser" });
+    servicesMock.setWalletMode.mockReturnValue({ mode: "agent" });
+    servicesMock.getWalletMode.mockReturnValue({ mode: "browser", address: "TBrowser" });
+    servicesMock.setGlobalNetwork.mockReturnValue("tron_nile");
+    servicesMock.getGlobalNetwork.mockReturnValue("tron_nile");
+    servicesMock.getGlobalNetworks.mockReturnValue({
+      tron: "tron_nile",
+      eth: "eth",
+      bsc: "bsc",
+    });
+    servicesMock.getNetworkProfile.mockReturnValue({
+      network: "tron_nile",
+      alias: "nile",
+      family: "tron",
+      options: {
+        tron: ["tron_mainnet", "tron_nile"],
+        eth: ["eth_mainnet", "eth_sepolia"],
+        bsc: ["bsc_mainnet", "bsc_testnet"],
+      },
+    });
+    const server = createServer();
+
+    const connected = await runTool(server, "connect_browser_wallet", { network: "tron_nile", address: "TBrowser" });
+    const switched = await runTool(server, "set_wallet_mode", { mode: "agent", network: "tron_nile" });
+    const mode = await runTool(server, "get_wallet_mode", { network: "tron_nile" });
+    const setNetwork = await runTool(server, "set_network", { network: "nile" });
+    const getNetwork = await runTool(server, "get_network");
+
+    expect(servicesMock.connectBrowserWallet).toHaveBeenCalledWith({ network: "tron_nile", address: "TBrowser" });
+    expect(servicesMock.setWalletMode).toHaveBeenCalledWith("agent", "tron_nile");
+    expect(servicesMock.getWalletMode).toHaveBeenCalledWith("tron_nile");
+    expect(servicesMock.setGlobalNetwork).toHaveBeenCalledWith("nile", undefined);
+    expect(connected.json.mode).toBe("browser");
+    expect(switched.json.mode).toBe("agent");
+    expect(mode.json.address).toBe("TBrowser");
+    expect(setNetwork.json.alias).toBe("nile");
+    expect(setNetwork.json.options.tron).toContain("tron_nile");
+    expect(setNetwork.json.defaults).toEqual({
+      tron: "tron_nile",
+      eth: "eth",
+      bsc: "bsc",
+    });
+    expect(getNetwork.json.network).toBe("tron_nile");
+  });
+
+  it("supports chain-family scoped defaults", async () => {
+    servicesMock.setGlobalNetwork.mockReturnValue("eth_sepolia");
+    servicesMock.getGlobalNetwork.mockReturnValue("tron_nile");
+    servicesMock.getGlobalNetworks.mockReturnValue({
+      tron: "tron_nile",
+      eth: "eth_sepolia",
+      bsc: "bsc",
+    });
+    servicesMock.getNetworkProfile.mockImplementation((network: string) => ({
+      network,
+      alias: network,
+      family: network.startsWith("eth") ? "eth" : network.startsWith("bsc") ? "bsc" : "tron",
+      options: {
+        tron: ["tron_mainnet", "tron_nile"],
+        eth: ["eth_mainnet", "eth_sepolia"],
+        bsc: ["bsc_mainnet", "bsc_testnet"],
+      },
+    }));
+
+    const server = createServer();
+    const setNetwork = await runTool(server, "set_network", { network: "mainnet", family: "bsc" });
+    const getNetwork = await runTool(server, "get_network");
+
+    expect(servicesMock.setGlobalNetwork).toHaveBeenCalledWith("mainnet", "bsc");
+    expect(setNetwork.json.defaults.eth).toBe("eth_sepolia");
+    expect(setNetwork.json.defaults.bsc).toBe("bsc");
+    expect(getNetwork.json.defaults.tron).toBe("tron_nile");
   });
 
   it("uses tron as the default network for wallet and protocol reads", async () => {
@@ -131,13 +246,51 @@ describe("registerUsddTools", () => {
     expect(overview.json.network).toBe("tron");
   });
 
+  it("returns active wallet address in default agent mode", async () => {
+    servicesMock.getWalletMode.mockReturnValue({
+      mode: "agent",
+      network: "tron",
+      address: "TWallet",
+      browserConnected: false,
+    });
+    servicesMock.getWalletAddress.mockReturnValue("TWallet");
+    const server = createServer();
+    const wallet = await runTool(server, "get_wallet_address");
+
+    expect(wallet.json.walletMode).toBe("agent");
+    expect(wallet.json.address).toBe("TWallet");
+    expect(servicesMock.getWalletAddress).toHaveBeenCalledWith("tron");
+  });
+
   it("lists wallets with the wallet store path", async () => {
     servicesMock.getWalletStorePath.mockReturnValue("/tmp/.agent-wallet");
     servicesMock.listWallets.mockReturnValue([{ id: "tron_1", type: "tron", address: "T1", isActive: true }]);
     const server = createServer();
     const result = await runTool(server, "list_wallets");
     expect(result.json.walletStore).toBe("/tmp/.agent-wallet");
+    expect(result.json.mode).toBe("agent");
+    expect(result.json.signingModes).toEqual({ tron: "agent", evm: "agent" });
     expect(result.json.wallets).toHaveLength(1);
+  });
+
+  it("includes connected browser wallet in list_wallets output", async () => {
+    servicesMock.getWalletStorePath.mockReturnValue("/tmp/.agent-wallet");
+    servicesMock.getConnectedBrowserWalletAddress.mockReturnValue("TBrowser");
+    servicesMock.getWalletMode.mockReturnValue({
+      mode: "browser",
+      network: "tron",
+      address: "TBrowser",
+      browserConnected: true,
+    });
+    servicesMock.listWallets.mockReturnValue([{ id: "tron_1", type: "tron", address: "T1", isActive: true }]);
+    const server = createServer();
+    const result = await runTool(server, "list_wallets");
+
+    expect(result.json.mode).toBe("browser");
+    expect(result.json.signingModes).toEqual({ tron: "browser", evm: "agent" });
+    expect(result.json.wallets[0].id).toBe("browser:tronlink");
+    expect(result.json.wallets[0].address).toBe("TBrowser");
+    expect(result.json.wallets).toHaveLength(2);
   });
 
   it("delegates wallet import and activation", async () => {
@@ -158,7 +311,7 @@ describe("registerUsddTools", () => {
       secret: "0xabc",
       index: undefined,
     });
-    expect(servicesMock.setActiveWallet).toHaveBeenCalledWith("evm_1");
+    expect(servicesMock.setActiveWallet).toHaveBeenCalledWith("evm_1", undefined);
     expect(imported.json.id).toBe("evm_1");
     expect(activated.json.isActive).toBe(true);
   });
@@ -214,12 +367,14 @@ describe("registerUsddTools", () => {
     });
   });
 
-  it("passes through token balance, allowance, and approval arguments", async () => {
+  it("passes through native/token balance, allowance, and approval arguments", async () => {
+    servicesMock.getNativeBalance.mockResolvedValue({ symbol: "ETH" });
     servicesMock.getTokenBalance.mockResolvedValue({ symbol: "USDD" });
     servicesMock.checkAllowance.mockResolvedValue({ sufficient: true });
     servicesMock.approveToken.mockResolvedValue({ txID: "0xapprove" });
     const server = createServer();
 
+    const native = await runTool(server, "get_native_balance", { owner: "0xOwner", network: "eth" });
     await runTool(server, "get_token_balance", { token: "0xToken", owner: "0xOwner", decimals: 6, network: "eth" });
     await runTool(server, "check_allowance", {
       token: "0xToken",
@@ -237,6 +392,10 @@ describe("registerUsddTools", () => {
       network: "eth",
     });
 
+    expect(servicesMock.getNativeBalance).toHaveBeenCalledWith({
+      network: "eth",
+      owner: "0xOwner",
+    });
     expect(servicesMock.getTokenBalance).toHaveBeenCalledWith({
       network: "eth",
       token: "0xToken",
@@ -258,6 +417,7 @@ describe("registerUsddTools", () => {
       amount: "max",
       decimals: 6,
     });
+    expect(native.json.symbol).toBe("ETH");
     expect(approved.json.txID).toBe("0xapprove");
   });
 

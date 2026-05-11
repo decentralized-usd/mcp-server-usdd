@@ -1,6 +1,6 @@
 import { ERC20_ABI } from "../abis.js";
 import { getNetworkConfig } from "../chains.js";
-import { getConfiguredWallet } from "./wallet.js";
+import { assertTronModeConfirmed, getConfiguredWallet } from "./wallet.js";
 import { type NetworkKey } from "../chains.js";
 import { getProxyAddress, readContract, writeContract } from "./contracts.js";
 import { utils } from "./utils.js";
@@ -77,7 +77,9 @@ export async function getTokenBalance(params: {
   owner?: string;
   decimals?: number;
 }) {
-  const owner = params.owner || getConfiguredWallet(params.network).address;
+  const localOwner = getConfiguredWallet(params.network).address;
+  const owner = params.owner || localOwner;
+  if (owner === localOwner) assertTronModeConfirmed(params.network);
   const [decimalsRaw, balanceRaw, symbol, name] = await Promise.all([
     params.decimals ?? Number(await readContract({
       network: params.network,
@@ -128,7 +130,9 @@ export async function checkAllowance(params: {
   amount?: string;
   decimals?: number;
 }) {
-  const owner = params.owner || getConfiguredWallet(params.network).address;
+  const localOwner = getConfiguredWallet(params.network).address;
+  const owner = params.owner || localOwner;
+  if (owner === localOwner) assertTronModeConfirmed(params.network);
   const [decimalsRaw, allowanceRaw, symbol, name] = await Promise.all([
     params.decimals ?? Number(await readContract({
       network: params.network,

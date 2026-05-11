@@ -1,6 +1,8 @@
 import { type NetworkKey } from "../chains.js";
+import { getNetworkConfig } from "../chains.js";
 import { getPublicClient } from "./clients.js";
 import { utils } from "./utils.js";
+import { assertTronModeConfirmed, getConfiguredWallet } from "./wallet.js";
 
 /**
  * Get TRX balance for an address.
@@ -17,6 +19,40 @@ export async function getTRXBalance(address: string, network: NetworkKey = "tron
     formatted,
     symbol: "TRX",
     decimals: 6,
+  };
+}
+
+export async function getNativeBalance(params: {
+  network: NetworkKey;
+  owner?: string;
+}) {
+  const config = getNetworkConfig(params.network);
+  const localOwner = getConfiguredWallet(params.network).address;
+  const owner = params.owner || localOwner;
+  if (owner === localOwner) assertTronModeConfirmed(params.network);
+  
+  if (config.kind === "tron") {
+    const tronWeb = getPublicClient(params.network) as any;
+    const balanceSun = BigInt(await tronWeb.trx.getBalance(owner));
+    return {
+      network: params.network,
+      owner,
+      symbol: config.nativeSymbol,
+      decimals: 6,
+      balanceRaw: balanceSun.toString(),
+      balance: utils.formatUnits(balanceSun, 6),
+    };
+  }
+
+  const client = getPublicClient(params.network) as any;
+  const balanceWei = BigInt(await client.getBalance({ address: owner }));
+  return {
+    network: params.network,
+    owner,
+    symbol: config.nativeSymbol,
+    decimals: 18,
+    balanceRaw: balanceWei.toString(),
+    balance: utils.formatUnits(balanceWei, 18),
   };
 }
 

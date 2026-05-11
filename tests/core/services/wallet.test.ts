@@ -77,4 +77,44 @@ describe("wallet store", () => {
     expect(configured.address).toBe(importedEvm.address);
     expect(configured.privateKey).toBe(EVM_PRIVATE_KEY);
   }, 20_000);
+
+  it("keeps prompting until the user explicitly confirms wallet mode", async () => {
+    const wallet = await import("../../../src/core/services/wallet.js");
+    wallet.initializeWalletStore();
+
+    // Throws every time until mode is confirmed
+    expect(() => wallet.assertWalletReadyForWrite("tron")).toThrow(/STOP.*TRON wallet signing mode/i);
+    expect(() => wallet.assertWalletReadyForWrite("tron")).toThrow(/STOP.*TRON wallet signing mode/i);
+
+    // Once user picks a mode, gate clears
+    wallet.setWalletMode("agent");
+    expect(() => wallet.assertWalletReadyForWrite("tron")).not.toThrow();
+    expect(() => wallet.assertWalletReadyForWrite("tron")).not.toThrow();
+  }, 20_000);
+
+  it("tracks active wallets independently for tron and evm", async () => {
+    const wallet = await import("../../../src/core/services/wallet.js");
+    wallet.initializeWalletStore();
+
+    const importedTron = await wallet.importWallet({
+      walletType: "tron",
+      secretType: "private_key",
+      secret: TRON_PRIVATE_KEY,
+    });
+    const importedEvm = await wallet.importWallet({
+      walletType: "evm",
+      secretType: "private_key",
+      secret: EVM_PRIVATE_KEY,
+    });
+
+    await wallet.setActiveWallet(importedTron.id, "tron");
+    await wallet.setActiveWallet(importedEvm.id, "evm");
+
+    // Confirm wallet mode so that getWalletAddress calls below do not fire the prompt.
+    wallet.setWalletMode("agent");
+
+    expect(wallet.getWalletAddress("tron")).toBe(importedTron.address);
+    expect(wallet.getWalletAddress("eth")).toBe(importedEvm.address);
+  }, 20_000);
+
 });

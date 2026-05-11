@@ -3,6 +3,8 @@ import { z } from "zod";
 import { getSupportedNetworks, getSupportedIlks, getSupportedPsmMarkets, type NetworkKey } from "./chains.js";
 import * as services from "./services/index.js";
 
+type NetworkFamily = "tron" | "eth" | "bsc";
+
 function asText(data: unknown) {
   return { content: [{ type: "text" as const, text: services.utils.formatJson(data) }] };
 }
@@ -12,22 +14,117 @@ function asError(error: unknown) {
   return { content: [{ type: "text" as const, text: `Error: ${message}` }], isError: true as const };
 }
 
-const networkField = z.enum(["tron", "eth", "bsc"]).optional().describe("Target network. Default: tron");
+const networkField = z.enum(["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"]).optional().describe("Target network. Default: tron");
+const networkFamilyField = z.enum(["tron", "eth", "bsc"]).optional().describe("Network family. Use with aliases like mainnet.");
 const walletTypeField = z.enum(["tron", "evm"]).describe("Wallet family: tron or evm");
 const secretTypeField = z.enum(["private_key", "mnemonic"]).describe("Secret type to import");
+const walletModeField = z.enum(["browser", "agent"]).describe("Wallet signing mode");
 
 export function registerUsddTools(server: McpServer) {
+  const resolveNetwork = (network?: NetworkKey): NetworkKey => network || services.getGlobalNetwork();
+
   server.registerTool("get_supported_networks", {
     description: "List supported USDD networks.",
     inputSchema: {},
-  }, async () => asText({ networks: getSupportedNetworks(), default: "tron" }));
+  }, async () => asText({ networks: getSupportedNetworks(), default: services.getGlobalNetwork() }));
+
+  server.registerTool("connect_browser_wallet", {
+    description: "Connect a browser wallet (TronLink-compatible) and switch to browser mode.",
+    inputSchema: {
+      network: networkField,
+      address: z.string().optional().describe("Optional browser wallet address override"),
+    },
+  }, async ({ network, address }) => {
+    try {
+      return asText(await services.connectBrowserWallet({
+        network: resolveNetwork(network as NetworkKey),
+        address,
+      }));
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("set_wallet_mode", {
+    description: "Switch signing mode between browser and agent.",
+    inputSchema: {
+      mode: walletModeField,
+      network: networkField,
+    },
+  }, async ({ mode, network }) => {
+    try {
+      return asText(services.setWalletMode(mode, resolveNetwork(network as NetworkKey)));
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_wallet_mode", {
+    description: "Get current signing mode (`browser` / `agent`) and active address.",
+    inputSchema: {
+      network: networkField,
+    },
+  }, async ({ network }) => {
+    try {
+      return asText(services.getWalletMode(resolveNetwork(network as NetworkKey)));
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("set_network", {
+    description: "Set default network for one family. Supports aliases (tron_mainnet, tron_nile, eth_mainnet, eth_sepolia, bsc_mainnet, bsc_testnet) or explicit network keys.",
+    inputSchema: {
+      network: z.string().min(1).describe("Network alias or key, e.g. tron_mainnet, tron_nile, eth_mainnet, bsc_testnet, tron, eth_sepolia"),
+      family: networkFamilyField,
+    },
+  }, async ({ network, family }) => {
+    try {
+      const active = services.setGlobalNetwork(network, family as NetworkFamily | undefined);
+      const defaults = services.getGlobalNetworks();
+      return asText({
+        ...services.getNetworkProfile(active),
+        defaults,
+        defaultAliases: {
+          tron: services.getNetworkAlias(defaults.tron),
+          eth: services.getNetworkAlias(defaults.eth),
+          bsc: services.getNetworkAlias(defaults.bsc),
+        },
+      });
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_network", {
+    description: "Get per-family default networks.",
+    inputSchema: {},
+  }, async () => {
+    const defaults = services.getGlobalNetworks();
+    const active = services.getGlobalNetwork();
+    return asText({
+      ...services.getNetworkProfile(active),
+      defaults,
+      defaultAliases: {
+        tron: services.getNetworkAlias(defaults.tron),
+        eth: services.getNetworkAlias(defaults.eth),
+        bsc: services.getNetworkAlias(defaults.bsc),
+      },
+    });
+  });
 
   server.registerTool("get_wallet_address", {
-    description: "Get the active wallet address for a specific network. Automatically generates an encrypted wallet on first use.",
+    description: "Get wallet status and active address for a network.",
     inputSchema: { network: networkField },
-  }, async ({ network = "tron" }) => {
+  }, async ({ network }) => {
     try {
-      return asText({ network, address: services.getWalletAddress(network as NetworkKey) });
+      const resolved = resolveNetwork(network as NetworkKey);
+      const modeInfo = services.getWalletMode(resolved);
+      return asText({
+        network: resolved,
+        walletMode: modeInfo.mode,
+        address: services.getWalletAddress(resolved),
+      });
     } catch (error) {
       return asError(error);
     }
@@ -38,9 +135,43 @@ export function registerUsddTools(server: McpServer) {
     inputSchema: {},
   }, async () => {
     try {
+      const activeNetwork = services.getGlobalNetwork();
+      const modeInfo = services.getWalletMode(activeNetwork);
+      const browserAddress = services.getConnectedBrowserWalletAddress();
+      const wallets = await services.listWallets();
+
+      const mergedWallets = browserAddress
+        ? [
+          {
+            id: "browser:tronlink",
+            type: "browser",
+            source: "browser_wallet",
+            address: browserAddress,
+            network: activeNetwork,
+            isActive: modeInfo.mode === "browser",
+          },
+          ...wallets,
+        ]
+        : wallets;
+
+      const activeTronWalletId = modeInfo.mode === "browser"
+        ? "browser:tronlink"
+        : (wallets.find((wallet: any) => wallet.isActiveTron)?.id || null);
+      const activeEvmWalletId = wallets.find((wallet: any) => wallet.isActiveEvm)?.id || null;
+
       return asText({
         walletStore: services.getWalletStorePath(),
-        wallets: await services.listWallets(),
+        mode: modeInfo.mode,
+        signingModes: {
+          tron: modeInfo.mode,
+          evm: "agent",
+        },
+        activeNetwork,
+        activeWallets: {
+          tron: activeTronWalletId,
+          evm: activeEvmWalletId,
+        },
+        wallets: mergedWallets,
       });
     } catch (error) {
       return asError(error);
@@ -72,10 +203,11 @@ export function registerUsddTools(server: McpServer) {
     description: "Set the active encrypted wallet by ID. Active wallet selection is tracked separately for tron and evm.",
     inputSchema: {
       walletId: z.string().min(1).describe("Wallet id from list_wallets"),
+      walletType: walletTypeField.optional().describe("Optional wallet family to activate independently (tron or evm)"),
     },
-  }, async ({ walletId }) => {
+  }, async ({ walletId, walletType }) => {
     try {
-      return asText(await services.setActiveWallet(walletId));
+      return asText(await services.setActiveWallet(walletId, walletType));
     } catch (error) {
       return asError(error);
     }
@@ -84,9 +216,9 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("get_protocol_overview", {
     description: "Get protocol addresses, ceilings, configured ilks, and PSM markets for USDD.",
     inputSchema: { network: networkField },
-  }, async ({ network = "tron" }) => {
+  }, async ({ network }) => {
     try {
-      return asText(await services.getProtocolOverview(network as NetworkKey));
+      return asText(await services.getProtocolOverview(resolveNetwork(network as NetworkKey)));
     } catch (error) {
       return asError(error);
     }
@@ -95,18 +227,18 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("get_supported_ilks", {
     description: "List configured collateral types and PSM joins for a network.",
     inputSchema: { network: networkField },
-  }, async ({ network = "tron" }) => asText({
-    network,
-    ilks: getSupportedIlks(network),
-    psmMarkets: getSupportedPsmMarkets(network),
+  }, async ({ network }) => asText({
+    network: resolveNetwork(network as NetworkKey),
+    ilks: getSupportedIlks(resolveNetwork(network as NetworkKey)),
+    psmMarkets: getSupportedPsmMarkets(resolveNetwork(network as NetworkKey)),
   }));
 
   server.registerTool("get_oracle_status", {
     description: "Inspect liquidation ratio, penalty, and oracle status for a collateral type.",
     inputSchema: { ilk: z.string().describe("Collateral type like TRX-A, WBTC-A, USDT-A, PSM-USDT"), network: networkField },
-  }, async ({ ilk, network = "tron" }) => {
+  }, async ({ ilk, network }) => {
     try {
-      return asText(await services.getOracleStatus(network as NetworkKey, ilk));
+      return asText(await services.getOracleStatus(resolveNetwork(network as NetworkKey), ilk));
     } catch (error) {
       return asError(error);
     }
@@ -115,9 +247,9 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("get_psm_status", {
     description: "Inspect PSM fees and enablement state.",
     inputSchema: { market: z.string().describe("PSM market like PSM-USDT"), network: networkField },
-  }, async ({ market, network = "tron" }) => {
+  }, async ({ market, network }) => {
     try {
-      return asText(await services.getPsmStatus(network as NetworkKey, market));
+      return asText(await services.getPsmStatus(resolveNetwork(network as NetworkKey), market));
     } catch (error) {
       return asError(error);
     }
@@ -126,11 +258,12 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("get_user_vaults", {
     description: "List all vault IDs for the configured wallet or a given address.",
     inputSchema: { address: z.string().optional().describe("Optional wallet address"), network: networkField },
-  }, async ({ address, network = "tron" }) => {
+  }, async ({ address, network }) => {
     try {
-      const ids = await services.getUserVaultIds(network as NetworkKey, address);
-      const queriedOwner = address || await services.getProxyAddress(network as NetworkKey, false);
-      return asText({ network, address: queriedOwner, vaultIds: ids.map((id) => id.toString()) });
+      const resolved = resolveNetwork(network as NetworkKey);
+      const ids = await services.getUserVaultIds(resolved, address);
+      const queriedOwner = address || await services.getProxyAddress(resolved, false);
+      return asText({ network: resolved, address: queriedOwner, vaultIds: ids.map((id) => id.toString()) });
     } catch (error) {
       return asError(error);
     }
@@ -139,9 +272,9 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("get_vault_summary", {
     description: "Get collateral, debt, and liquidation metrics for one vault.",
     inputSchema: { cdpId: z.string().describe("Vault/CDP id"), network: networkField },
-  }, async ({ cdpId, network = "tron" }) => {
+  }, async ({ cdpId, network }) => {
     try {
-      return asText(await services.getVaultSummary(network as NetworkKey, BigInt(cdpId)));
+      return asText(await services.getVaultSummary(resolveNetwork(network as NetworkKey), BigInt(cdpId)));
     } catch (error) {
       return asError(error);
     }
@@ -150,9 +283,9 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("analyze_vault_risk", {
     description: "Get risk analysis for one vault with warnings.",
     inputSchema: { cdpId: z.string().describe("Vault/CDP id"), network: networkField },
-  }, async ({ cdpId, network = "tron" }) => {
+  }, async ({ cdpId, network }) => {
     try {
-      return asText(await services.analyzeVaultRisk(network as NetworkKey, BigInt(cdpId)));
+      return asText(await services.analyzeVaultRisk(resolveNetwork(network as NetworkKey), BigInt(cdpId)));
     } catch (error) {
       return asError(error);
     }
@@ -161,9 +294,9 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("get_savings_status", {
     description: "Inspect USDD Savings metrics where supported.",
     inputSchema: { network: networkField },
-  }, async ({ network = "tron" }) => {
+  }, async ({ network }) => {
     try {
-      return asText(await services.getSavingsStatus(network as NetworkKey));
+      return asText(await services.getSavingsStatus(resolveNetwork(network as NetworkKey)));
     } catch (error) {
       return asError(error);
     }
@@ -172,9 +305,26 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("open_vault", {
     description: "Open a vault/CDP via DSProxy. Idempotent: if a vault for the given ilk already exists, returns the existing CDP id without submitting a transaction.",
     inputSchema: { ilk: z.string().describe("Collateral type like TRX-A, WBTC-A, or SA001-A"), network: networkField },
-  }, async ({ ilk, network = "tron" }) => {
+  }, async ({ ilk, network }) => {
     try {
-      return asText(await services.openVault(network as NetworkKey, ilk));
+      return asText(await services.openVault(resolveNetwork(network as NetworkKey), ilk));
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_native_balance", {
+    description: "Get native token balance (TRX/ETH/BNB) for the configured wallet or a specified owner.",
+    inputSchema: {
+      owner: z.string().optional().describe("Optional owner address; defaults to configured wallet"),
+      network: networkField,
+    },
+  }, async ({ owner, network }) => {
+    try {
+      return asText(await services.getNativeBalance({
+        network: resolveNetwork(network as NetworkKey),
+        owner,
+      }));
     } catch (error) {
       return asError(error);
     }
@@ -188,10 +338,10 @@ export function registerUsddTools(server: McpServer) {
       decimals: z.number().int().positive().optional().describe("Optional token decimals override"),
       network: networkField,
     },
-  }, async ({ token, owner, decimals, network = "tron" }) => {
+  }, async ({ token, owner, decimals, network }) => {
     try {
       return asText(await services.getTokenBalance({
-        network: network as NetworkKey,
+        network: resolveNetwork(network as NetworkKey),
         token,
         owner,
         decimals,
@@ -211,10 +361,10 @@ export function registerUsddTools(server: McpServer) {
       decimals: z.number().int().positive().optional().describe("Optional token decimals override"),
       network: networkField,
     },
-  }, async ({ token, spender, owner, amount, decimals, network = "tron" }) => {
+  }, async ({ token, spender, owner, amount, decimals, network }) => {
     try {
       return asText(await services.checkAllowance({
-        network: network as NetworkKey,
+        network: resolveNetwork(network as NetworkKey),
         token,
         spender,
         owner,
@@ -235,10 +385,10 @@ export function registerUsddTools(server: McpServer) {
       decimals: z.number().int().positive().optional().describe("Optional token decimals override"),
       network: networkField,
     },
-  }, async ({ token, spender, amount, decimals, network = "tron" }) => {
+  }, async ({ token, spender, amount, decimals, network }) => {
     try {
       return asText(await services.approveToken({
-        network: network as NetworkKey,
+        network: resolveNetwork(network as NetworkKey),
         token,
         spender,
         amount,
@@ -259,10 +409,10 @@ export function registerUsddTools(server: McpServer) {
       transferFrom: z.boolean().optional().describe("For ERC20 collaterals, whether proxy action should pull from wallet. Default: true"),
       network: networkField,
     },
-  }, async ({ ilk, collateralAmount, drawAmount, cdpId, transferFrom, network = "tron" }) => {
+  }, async ({ ilk, collateralAmount, drawAmount, cdpId, transferFrom, network }) => {
     try {
       return asText(await services.depositAndMint({
-        network: network as NetworkKey,
+        network: resolveNetwork(network as NetworkKey),
         ilk,
         collateralAmount,
         drawAmount,
@@ -277,9 +427,9 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("mint_usdd", {
     description: "Draw additional USDD debt from an existing vault.",
     inputSchema: { cdpId: z.string(), amount: z.string(), network: networkField },
-  }, async ({ cdpId, amount, network = "tron" }) => {
+  }, async ({ cdpId, amount, network }) => {
     try {
-      return asText(await services.drawUsdd(network as NetworkKey, BigInt(cdpId), amount));
+      return asText(await services.drawUsdd(resolveNetwork(network as NetworkKey), BigInt(cdpId), amount));
     } catch (error) {
       return asError(error);
     }
@@ -288,9 +438,9 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("repay_usdd", {
     description: "Repay USDD debt for an existing vault.",
     inputSchema: { cdpId: z.string(), amount: z.string(), network: networkField },
-  }, async ({ cdpId, amount, network = "tron" }) => {
+  }, async ({ cdpId, amount, network }) => {
     try {
-      return asText(await services.repayUsdd(network as NetworkKey, BigInt(cdpId), amount));
+      return asText(await services.repayUsdd(resolveNetwork(network as NetworkKey), BigInt(cdpId), amount));
     } catch (error) {
       return asError(error);
     }
@@ -299,9 +449,9 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("withdraw_collateral", {
     description: "Withdraw collateral from an existing vault.",
     inputSchema: { cdpId: z.string(), ilk: z.string(), amount: z.string(), network: networkField },
-  }, async ({ cdpId, ilk, amount, network = "tron" }) => {
+  }, async ({ cdpId, ilk, amount, network }) => {
     try {
-      return asText(await services.withdrawCollateral(network as NetworkKey, BigInt(cdpId), ilk, amount));
+      return asText(await services.withdrawCollateral(resolveNetwork(network as NetworkKey), BigInt(cdpId), ilk, amount));
     } catch (error) {
       return asError(error);
     }
@@ -310,9 +460,9 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("close_vault", {
     description: "Repay all debt and free collateral using wipeAllAndFree* proxy actions.",
     inputSchema: { cdpId: z.string(), ilk: z.string(), amountToFree: z.string(), network: networkField },
-  }, async ({ cdpId, ilk, amountToFree, network = "tron" }) => {
+  }, async ({ cdpId, ilk, amountToFree, network }) => {
     try {
-      return asText(await services.closeVault(network as NetworkKey, BigInt(cdpId), ilk, amountToFree));
+      return asText(await services.closeVault(resolveNetwork(network as NetworkKey), BigInt(cdpId), ilk, amountToFree));
     } catch (error) {
       return asError(error);
     }
@@ -321,9 +471,9 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("psm_swap_to_usdd", {
     description: "Swap gem collateral into USDD through the PSM.",
     inputSchema: { market: z.string(), amount: z.string(), network: networkField },
-  }, async ({ market, amount, network = "tron" }) => {
+  }, async ({ market, amount, network }) => {
     try {
-      return asText(await services.sellGemForUsdd(network as NetworkKey, market, amount));
+      return asText(await services.sellGemForUsdd(resolveNetwork(network as NetworkKey), market, amount));
     } catch (error) {
       return asError(error);
     }
@@ -332,9 +482,9 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("psm_swap_from_usdd", {
     description: "Swap USDD into the PSM gem asset.",
     inputSchema: { market: z.string(), amount: z.string(), network: networkField },
-  }, async ({ market, amount, network = "tron" }) => {
+  }, async ({ market, amount, network }) => {
     try {
-      return asText(await services.buyGemWithUsdd(network as NetworkKey, market, amount));
+      return asText(await services.buyGemWithUsdd(resolveNetwork(network as NetworkKey), market, amount));
     } catch (error) {
       return asError(error);
     }
@@ -343,9 +493,9 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("deposit_savings", {
     description: "Deposit USDD into sUSDD where supported.",
     inputSchema: { amount: z.string(), network: networkField },
-  }, async ({ amount, network = "tron" }) => {
+  }, async ({ amount, network }) => {
     try {
-      return asText(await services.depositSavings(network as NetworkKey, amount));
+      return asText(await services.depositSavings(resolveNetwork(network as NetworkKey), amount));
     } catch (error) {
       return asError(error);
     }
@@ -354,9 +504,9 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("withdraw_savings", {
     description: "Withdraw USDD from sUSDD where supported.",
     inputSchema: { amount: z.string(), network: networkField },
-  }, async ({ amount, network = "tron" }) => {
+  }, async ({ amount, network }) => {
     try {
-      return asText(await services.withdrawSavings(network as NetworkKey, amount));
+      return asText(await services.withdrawSavings(resolveNetwork(network as NetworkKey), amount));
     } catch (error) {
       return asError(error);
     }

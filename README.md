@@ -1,12 +1,12 @@
 # mcp-server-usdd
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![Networks](https://img.shields.io/badge/Networks-TRON%20%7C%20ETH%20%7C%20BSC-red)
+![Networks](https://img.shields.io/badge/Networks-TRON%20%7C%20ETH%20%7C%20BSC%20%7C%20INTERNAL%20TESTNETS-red)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8+-3178C6)
 ![MCP](https://img.shields.io/badge/MCP-1.22.0+-blue)
 ![USDD](https://img.shields.io/badge/Protocol-USDD-green)
 
-An MCP server for the **USDD protocol** across **TRON, Ethereum, and BNB Smart Chain**. The current version focuses on three core surfaces: **Vault/CDP**, **PSM**, and **USDD Savings**.
+An MCP server for the **USDD protocol** across **TRON, Ethereum, and BNB Smart Chain** (plus internal testnets). The current version focuses on three core surfaces: **Vault/CDP**, **PSM**, and **USDD Savings**.
 
 ## Scope
 
@@ -25,6 +25,9 @@ Current implementation focuses on:
 | TRON | `tron` | TRON-native vault and PSM support |
 | Ethereum | `eth` | Vault, PSM, USDD Savings |
 | BNB Smart Chain | `bsc` | Mirrors ETH deployment structure |
+| TRON Nile | `tron_nile` | Internal testnet deployment |
+| Ethereum Sepolia  | `eth_sepolia` | Internal testnet deployment |
+| BSC Testnet | `bsc_testnet` | Internal testnet deployment |
 
 ## Prerequisites
 
@@ -54,18 +57,21 @@ npm run dev
 
 ## Configuration
 
-### Wallet Setup (Automatic)
+### Wallet Modes
 
-The server uses [@bankofai/agent-wallet](https://github.com/BofAI/agent-wallet) for encrypted local wallet storage. On first startup it will automatically initialize `~/.agent-wallet/` and create a default wallet if none exists.
+The server supports two signing modes:
 
-On startup, the server will:
-1. Check for existing wallets in `~/.agent-wallet/`
-2. If none are found, auto-generate a new encrypted wallet
-3. Display the derived TRON and EVM addresses in the console
+- **Browser mode (recommended)**: connect a TronLink-compatible browser wallet and sign in browser.
+- **Agent mode**: use encrypted local private keys stored in `~/.agent-wallet/`.
 
-You can also manage wallets via **CLI** or **MCP tools**:
+For TRON writes, each Claude session shows a one-time signing-mode confirmation reminder before the first write.
+
+You can also manage wallets via CLI or MCP tools:
 
 #### CLI (agent-wallet)
+
+The server uses [@bankofai/agent-wallet](https://github.com/BofAI/agent-wallet) for encrypted local wallet storage. On first startup it will automatically initialize ~/.agent-wallet/ and create a default wallet if none exists.
+
 ```bash
 # Import an existing private key or mnemonic
 npx agent-wallet add
@@ -80,22 +86,17 @@ npx agent-wallet list
 npx agent-wallet activate <wallet-id>
 ```
 
-#### MCP Tools (runtime)
+### MCP Tools (runtime)
 
 | Tool | Description |
 |------|-------------|
-| `get_wallet_address` | Shows current address (auto-generates wallet if needed) |
-| `import_wallet` | Import an existing private key (stored encrypted) |
-| `list_wallets` | List all wallets with IDs, types, addresses |
-| `set_active_wallet` | Switch active wallet by ID |
+| `get_wallet_address` | Shows current address |
+| `connect_browser_wallet` | Connect TronLink / browser wallet for signing |
+| `set_wallet_mode` | Switch between browser and agent signing |
+| `get_wallet_mode` | Show current signing mode and addresses |
+| `list_wallets` | List wallets with per-family active status (`tron` and `evm`) |
+| `set_active_wallet` | Switch active wallet by ID, optionally scoped by `walletType` (`tron`/`evm`) |
 
-```bash
-# Optional for automated/CI setups
-export AGENT_WALLET_PASSWORD="your_wallet_password"
-
-# Strongly recommended — avoids TronGrid 429 rate limiting on mainnet
-export TRONGRID_API_KEY="your_trongrid_api_key"
-```
 
 ## Client Configuration
 
@@ -162,13 +163,28 @@ Add to .cursor/mcp.json:
 
 ## Tools
 
-### Common
+### Wallet & Network
 
 | Tool | Description | Write? |
 |---|---|---|
 | `get_supported_networks` | List supported networks | No |
+| `set_network` | Set default network for one family (`tron`/`eth`/`bsc`), supports aliases like `mainnet`, `nile` | Yes |
+| `get_network` | Get per-family default networks | No |
+| `get_wallet_mode` | Get active wallet signing mode (`agent`/`browser`) | No |
+| `set_wallet_mode` | Switch active signing mode | Yes |
+| `connect_browser_wallet` | Connect a browser wallet and activate browser mode | Yes |
+| `get_wallet_address` | Show current address for the target network | No |
+| `list_wallets` | List wallets and per-family active pointers (`tron`/`evm`) | No |
+| `set_active_wallet` | Switch active wallet by ID (supports optional `walletType`) | Yes |
+| `import_wallet` | Import private key/mnemonic into encrypted local store | Yes |
+
+### Common
+
+| Tool | Description | Write? |
+|---|---|---|
 | `get_protocol_overview` | Show configured protocol addresses, ilks, PSMs, and ceilings | No |
 | `get_supported_ilks` | List configured collateral types and PSM joins | No |
+| `get_native_balance` | Read native balance (`TRX` / `ETH` / `BNB`) | No |
 | `get_token_balance` | Read ERC20/TRC20 balance | No |
 | `check_allowance` | Read ERC20/TRC20 allowance and compare against an optional amount | No |
 | `approve_token` | Approve token allowance | Yes |
@@ -246,8 +262,10 @@ mcp-server-usdd/
 ## Notes
 
 - Vault writes assume the configured wallet can sign on the target chain.
+- All tools default to the family-specific defaults set by `set_network`; if `network` is omitted, tron-family default is used unless the tool call explicitly passes `network`.
 - ERC20/TRC20 flows often require `approve_token` first.
-- TRON, ETH, and BSC deployments have similar USDD protocol structure but different addresses and token decimals.
+- Browser mode now supports real transaction signing on TRON networks (`tron`, `tron_nile`) via `tronlink-signer` (TronLink/TIP-6963 flow). EVM networks currently continue to use agent-wallet signing.
+- TRON, ETH, BSC, and internal testnet deployments have similar protocol structure but different addresses and token decimals.
 - This version intentionally excludes migration and auction actions so we can iterate the Vault + PSM + USDD Savings core first.
 
 ## Security Considerations

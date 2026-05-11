@@ -1,7 +1,7 @@
 import { encodeFunctionData } from "viem";
 import { getPublicClient, getWalletClient } from "./clients.js";
 import { getNetworkConfig, type NetworkKey } from "../chains.js";
-import { getConfiguredWallet } from "./wallet.js";
+import { assertWalletReadyForWrite, getConfiguredWallet, getWalletAddress, signTransactionWithWallet } from "./wallet.js";
 import { utils } from "./utils.js";
 import { PROXY_CALL_ABI, PROXY_REGISTRY_ABI } from "../abis.js";
 
@@ -43,6 +43,21 @@ async function waitForTronReceipt(network: NetworkKey, txID: string) {
   throw new Error(`TRON transaction ${txID} was not confirmed within ${maxAttempts * intervalMs}ms.`);
 }
 
+function getAbiInputTypes(abi: readonly any[], functionName: string, argCount: number): string[] {
+  const candidates = abi.filter((item: any) => item.type === "function" && item.name === functionName);
+  if (candidates.length === 0) {
+    throw new Error(`Function ${functionName} not found in ABI.`);
+  }
+  const matched = candidates.filter((item: any) => (item.inputs || []).length === argCount);
+  if (matched.length === 0) {
+    throw new Error(`No overload of ${functionName} accepts ${argCount} argument(s).`);
+  }
+  if (matched.length > 1) {
+    throw new Error(`Ambiguous overload for ${functionName} with ${argCount} argument(s).`);
+  }
+  return (matched[0].inputs || []).map((input: any) => input.type as string);
+}
+
 export async function readContract(params: { network: NetworkKey; address: string; abi: readonly any[]; functionName: string; args?: any[] }) {
   const config = getNetworkConfig(params.network);
   const args = params.args || [];
@@ -62,12 +77,35 @@ export async function readContract(params: { network: NetworkKey; address: strin
 }
 
 export async function writeContract(params: { network: NetworkKey; address: string; abi: readonly any[]; functionName: string; args?: any[]; value?: bigint }) {
+  assertWalletReadyForWrite(params.network);
   const config = getNetworkConfig(params.network);
   const args = params.args || [];
   if (config.kind === "tron") {
-    const tronWeb = getWalletClient(params.network) as any;
-    const contract = tronWeb.contract(params.abi as any, params.address);
-    const txID = await contract.methods[params.functionName](...args).send(params.value ? { callValue: Number(params.value) } : {});
+    const tronWeb = getPublicClient(params.network) as any;
+    const inputTypes = getAbiInputTypes(params.abi, params.functionName, args.length);
+    const signature = `${params.functionName}(${inputTypes.join(",")})`;
+    const typedParams = args.map((value, index) => ({
+      type: inputTypes[index],
+      value,
+    }));
+    const ownerAddress = getWalletAddress(params.network);
+    const options: any = {};
+    if (params.value) options.callValue = Number(params.value);
+
+    const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+      params.address,
+      signature,
+      options,
+      typedParams,
+      ownerAddress,
+    );
+    const signedTx = await signTransactionWithWallet(tx.transaction, params.network, `${params.functionName}(${inputTypes.join(",")})`);
+    const broadcast = await tronWeb.trx.sendRawTransaction(signedTx);
+    if (!broadcast?.result) {
+      const decodedMessage = decodeTronErrorMessage(broadcast?.message) || JSON.stringify(broadcast);
+      throw new Error(`Broadcast failed: ${decodedMessage}`);
+    }
+    const txID = broadcast.txid || broadcast.transaction?.txID || tx.transaction.txID;
     const receipt = await waitForTronReceipt(params.network, txID);
     return { txID, receipt };
   }

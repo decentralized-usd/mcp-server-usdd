@@ -16,10 +16,13 @@ import * as bip39 from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { HDKey } from "@scure/bip32";
 import { getNetworkConfig, type NetworkKey } from "../chains.js";
+import { TronWalletSigner } from "../browser-signer.js";
+import type { TronNetwork } from "tronlink-signer";
 
 type WalletType = "tron" | "evm";
 type WalletSource = "generated" | "imported_private_key" | "imported_mnemonic" | "external";
 type SecretType = "private_key" | "mnemonic";
+type WalletMode = "agent" | "browser";
 
 export interface ConfiguredWallet {
   id: string;
@@ -38,6 +41,15 @@ export interface WalletInfo {
   createdAt: string;
   updatedAt: string;
   isActive: boolean;
+  isActiveTron?: boolean;
+  isActiveEvm?: boolean;
+}
+
+export interface WalletModeInfo {
+  mode: WalletMode;
+  network: NetworkKey;
+  address: string | null;
+  browserConnected: boolean;
 }
 
 interface WalletMetadata {
@@ -49,11 +61,15 @@ interface WalletMetadata {
 
 interface WalletState {
   wallets: Record<string, WalletMetadata>;
+  activeByType?: Partial<Record<WalletType, string>>;
 }
 
 const WALLET_DIR = process.env.AGENT_WALLET_DIR || join(homedir(), ".agent-wallet");
 const STATE_FILE = join(WALLET_DIR, "usdd-wallet-state.json");
 const MASTER_FILE = join(WALLET_DIR, "master.json");
+let activeWalletMode: WalletMode = "agent";
+let tronModeConfirmedThisSession = false;
+let browserSigner: TronWalletSigner | null = null;
 
 function ensureDir(path: string) {
   mkdirSync(path, { recursive: true, mode: 0o700 });
@@ -104,14 +120,29 @@ function getKvStore() {
 function getWalletState(): WalletState {
   ensureWalletStoreLayout();
   try {
-    return JSON.parse(readFileSync(STATE_FILE, "utf8")) as WalletState;
+    const parsed = JSON.parse(readFileSync(STATE_FILE, "utf8")) as WalletState;
+    return {
+      wallets: parsed.wallets || {},
+      activeByType: parsed.activeByType || {},
+    };
   } catch {
-    return { wallets: {} };
+    return { wallets: {}, activeByType: {} };
   }
 }
 
 function saveWalletState(state: WalletState) {
   saveJson(STATE_FILE, state);
+}
+
+function inferWalletType(id: string, state: WalletState): WalletType {
+  if (state.wallets[id]?.preferredType) return state.wallets[id].preferredType!;
+  if (id.startsWith("evm_")) return "evm";
+  return "tron";
+}
+
+function getWalletIds(): string[] {
+  const provider = getProvider("tron");
+  return provider.listWallets().map(([id]) => id);
 }
 
 function toAgentNetwork(value: NetworkKey | WalletType | string) {
@@ -246,9 +277,22 @@ function ensureDefaultWalletId() {
   const provider = getProvider("tron");
   const wallets = provider.listWallets();
   const activeId = provider.getActiveId();
-  if (activeId) return activeId;
+  if (activeId) {
+    const state = getWalletState();
+    state.activeByType = state.activeByType || {};
+    if (!state.activeByType.tron) state.activeByType.tron = activeId;
+    if (!state.activeByType.evm) state.activeByType.evm = activeId;
+    saveWalletState(state);
+    return activeId;
+  }
   if (wallets.length > 0) {
     provider.setActive(wallets[0][0]);
+    const fallbackId = wallets[0][0];
+    const state = getWalletState();
+    state.activeByType = state.activeByType || {};
+    if (!state.activeByType.tron) state.activeByType.tron = fallbackId;
+    if (!state.activeByType.evm) state.activeByType.evm = fallbackId;
+    saveWalletState(state);
     return wallets[0][0];
   }
 
@@ -268,8 +312,33 @@ function ensureDefaultWalletId() {
     createdAt: now,
     updatedAt: now,
   };
+  state.activeByType = state.activeByType || {};
+  state.activeByType.tron = walletId;
+  state.activeByType.evm = walletId;
   saveWalletState(state);
   return walletId;
+}
+
+function getSelectedWalletId(walletType: WalletType): string {
+  const state = getWalletState();
+  const walletIds = getWalletIds();
+  const selected = state.activeByType?.[walletType];
+  if (selected && walletIds.includes(selected)) return selected;
+
+  if (walletIds.length === 0) {
+    const created = ensureDefaultWalletId();
+    const refreshedState = getWalletState();
+    refreshedState.activeByType = refreshedState.activeByType || {};
+    refreshedState.activeByType[walletType] = created;
+    saveWalletState(refreshedState);
+    return created;
+  }
+
+  const fallback = walletIds[0];
+  state.activeByType = state.activeByType || {};
+  state.activeByType[walletType] = fallback;
+  saveWalletState(state);
+  return fallback;
 }
 
 function resolveAddresses(walletId: string) {
@@ -281,21 +350,148 @@ function resolveAddresses(walletId: string) {
   };
 }
 
+function toBrowserNetwork(network: NetworkKey): TronNetwork {
+  if (network === "tron") return "mainnet";
+  if (network === "tron_nile") return "nile";
+  throw new Error(`Browser wallet signing is only supported for TRON networks (tron/tron_nile). Received ${network}.`);
+}
+
+function getBrowserSigner() {
+  if (!browserSigner) browserSigner = new TronWalletSigner();
+  return browserSigner;
+}
+
 export function initializeWalletStore() {
-  const walletId = ensureDefaultWalletId();
+  ensureDefaultWalletId();
   const tron = getConfiguredWallet("tron");
   const evm = getConfiguredWallet("eth");
   return {
     dir: WALLET_DIR,
-    tron: { id: walletId, address: tron.address },
-    evm: { id: walletId, address: evm.address },
+    tron: { id: tron.id, address: tron.address },
+    evm: { id: evm.id, address: evm.address },
   };
+}
+
+function normalizeBrowserAddress(network: NetworkKey, address: string): string {
+  const config = getNetworkConfig(network);
+  const trimmed = address.trim();
+  if (config.kind === "tron") {
+    if (!TronWeb.isAddress(trimmed)) {
+      throw new Error(`Invalid TRON browser wallet address: ${address}`);
+    }
+    return trimmed.startsWith("T") ? trimmed : TronWeb.address.fromHex(trimmed.startsWith("0x") ? `41${trimmed.slice(2)}` : trimmed);
+  }
+  if (!/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
+    throw new Error(`Invalid EVM browser wallet address: ${address}`);
+  }
+  return trimmed.toLowerCase();
+}
+
+export async function connectBrowserWallet(params?: { network?: NetworkKey; address?: string }) {
+  const network = params?.network || "tron";
+  const config = getNetworkConfig(network);
+  if (config.kind !== "tron") {
+    throw new Error("Browser wallet mode currently supports TRON-compatible browser wallets only.");
+  }
+
+  const requiredAddress = params?.address ? normalizeBrowserAddress(network, params.address) : undefined;
+  const signer = getBrowserSigner();
+  const { address, approvalUrl } = await signer.connectWallet({
+    address: requiredAddress,
+    network: toBrowserNetwork(network),
+  });
+
+  activeWalletMode = "browser";
+  tronModeConfirmedThisSession = true;
+  return {
+    mode: activeWalletMode,
+    network,
+    address,
+    approvalUrl,
+    browserConnected: true,
+    message: `Connected browser wallet ${address} on ${network}.`,
+  };
+}
+
+export function setWalletMode(mode: WalletMode, network?: NetworkKey) {
+  if (mode === "browser") {
+    const target = network || "tron";
+    if (getNetworkConfig(target).kind !== "tron") {
+      throw new Error(`Browser mode currently supports TRON networks only. Received ${target}.`);
+    }
+    const browserAddress = getBrowserSigner().getConnectedAddress();
+    if (!browserAddress) {
+      throw new Error(`No browser wallet connected for ${target}. Call connect_browser_wallet first.`);
+    }
+  }
+  activeWalletMode = mode;
+  tronModeConfirmedThisSession = true;
+  return getWalletMode(network);
+}
+
+export function getWalletMode(network?: NetworkKey): WalletModeInfo {
+  const target = network || "tron";
+  const browserAddress = getBrowserSigner().getConnectedAddress();
+  const browserSupported = getNetworkConfig(target).kind === "tron";
+  if (activeWalletMode === "browser") {
+    return {
+      mode: "browser",
+      network: target,
+      address: browserSupported ? browserAddress : null,
+      browserConnected: browserSupported && Boolean(browserAddress),
+    };
+  }
+
+  return {
+    mode: "agent",
+    network: target,
+    address: getConfiguredWallet(target).address,
+    browserConnected: browserSupported && Boolean(browserAddress),
+  };
+}
+
+export function isBrowserWalletMode(): boolean {
+  return activeWalletMode === "browser";
+}
+
+export function getConnectedBrowserWalletAddress(): string | null {
+  return getBrowserSigner().getConnectedAddress();
+}
+
+export function assertTronModeConfirmed(network: NetworkKey) {
+  const config = getNetworkConfig(network);
+  if (config.kind === "tron" && !tronModeConfirmedThisSession) {
+    throw new Error(
+      "⛔ STOP — TRON wallet signing mode has not been confirmed for this session.\n" +
+      "Do NOT call any other tools. Do NOT query any balances, addresses, or chain data.\n" +
+      "You MUST immediately present the following choice to the user and wait for their response:\n\n" +
+      "  Option A (Recommended): Browser wallet — call connect_browser_wallet. Signs via TronLink; private keys never leave the browser.\n" +
+      "  Option B: Agent wallet — call set_wallet_mode with mode='agent'. Encrypted key stored in ~/.agent-wallet/.\n\n" +
+      "Do not proceed with any operation until the user explicitly picks an option.",
+    );
+  }
+}
+
+export function assertWalletReadyForWrite(network: NetworkKey) {
+  assertTronModeConfirmed(network);
+
+  const config = getNetworkConfig(network);
+  const browserAddress = getBrowserSigner().getConnectedAddress();
+
+  if (activeWalletMode === "browser" && config.kind === "tron" && !browserAddress) {
+    throw new Error(
+      "Browser wallet mode is active but no browser wallet is connected. " +
+      "Call connect_browser_wallet first, or switch to agent mode via set_wallet_mode.",
+    );
+  }
 }
 
 export function listWallets(): WalletInfo[] {
   const provider = getProvider("tron");
   const state = getWalletState();
-  const activeId = ensureDefaultWalletId();
+  ensureDefaultWalletId();
+  const activeTronId = getSelectedWalletId("tron");
+  const activeEvmId = getSelectedWalletId("evm");
   const wallets = provider.listWallets();
 
   return wallets.map(([id]) => {
@@ -311,7 +507,9 @@ export function listWallets(): WalletInfo[] {
       evmAddress: addresses.evmAddress,
       createdAt: meta?.createdAt || "",
       updatedAt: meta?.updatedAt || "",
-      isActive: id === activeId,
+      isActiveTron: id === activeTronId,
+      isActiveEvm: id === activeEvmId,
+      isActive: id === activeTronId || id === activeEvmId,
     };
   });
 }
@@ -363,11 +561,11 @@ export function importWallet(params: {
     createdAt: now,
     updatedAt: now,
   };
-  saveWalletState(state);
-
-  if (!provider.getActiveId()) {
-    provider.setActive(walletId);
+  state.activeByType = state.activeByType || {};
+  if (!state.activeByType[params.walletType]) {
+    state.activeByType[params.walletType] = walletId;
   }
+  saveWalletState(state);
 
   return {
     id: walletId,
@@ -376,7 +574,7 @@ export function importWallet(params: {
     source: state.wallets[walletId].source,
     createdAt: now,
     updatedAt: now,
-    isActive: provider.getActiveId() === walletId,
+    isActive: state.activeByType[params.walletType] === walletId,
     imported: true,
     message: `Imported ${params.walletType} wallet ${derived.address}.`,
   };
@@ -402,6 +600,10 @@ export function generateWallet(walletType: WalletType) {
     createdAt: now,
     updatedAt: now,
   };
+  state.activeByType = state.activeByType || {};
+  if (!state.activeByType[walletType]) {
+    state.activeByType[walletType] = walletId;
+  }
   saveWalletState(state);
 
   return {
@@ -411,30 +613,71 @@ export function generateWallet(walletType: WalletType) {
     source: "generated" as const,
     createdAt: now,
     updatedAt: now,
-    isActive: provider.getActiveId() === walletId,
+    isActive: state.activeByType[walletType] === walletId,
     message: `Generated ${walletType} wallet ${generated.address}.`,
   };
 }
 
-export function setActiveWallet(id: string) {
-  const provider = getProvider("tron");
-  provider.setActive(id);
+export function setActiveWallet(id: string, walletType?: WalletType) {
+  if (id === "browser:tronlink") {
+    const mode = setWalletMode("browser", "tron");
+    return {
+      id,
+      type: "browser",
+      address: mode.address,
+      source: "browser_wallet",
+      isActive: true,
+      activeFor: "tron",
+      message: "Activated browser wallet for TRON signing.",
+    };
+  }
+
+  const walletIds = getWalletIds();
+  if (!walletIds.includes(id)) {
+    throw new Error(`Wallet ${id} not found in local wallet store.`);
+  }
+
   const state = getWalletState();
+  const targetType = walletType || inferWalletType(id, state);
+  const provider = getProvider(toAgentNetwork(targetType));
+  provider.setActive(id);
+  state.activeByType = state.activeByType || {};
+  state.activeByType[targetType] = id;
   const meta = state.wallets[id];
+  saveWalletState(state);
   const addresses = resolveAddresses(id);
   return {
     id,
-    type: meta?.preferredType || "tron",
-    address: meta?.preferredType === "evm" ? addresses.evmAddress : addresses.tronAddress,
+    type: targetType,
+    address: targetType === "evm" ? addresses.evmAddress : addresses.tronAddress,
     source: meta?.source || "external",
     isActive: true,
-    message: `Activated wallet ${id}.`,
+    activeFor: targetType,
+    message: `Activated wallet ${id} for ${targetType}.`,
   };
 }
 
 export function getConfiguredWallet(network: NetworkKey): ConfiguredWallet {
-  const walletId = ensureDefaultWalletId();
+  if (activeWalletMode === "browser") {
+    const config = getNetworkConfig(network);
+    if (config.kind === "tron") {
+      const browserAddress = getBrowserSigner().getConnectedAddress();
+      if (!browserAddress) {
+        throw new Error(
+          "Browser wallet is no longer connected. Call connect_browser_wallet to reconnect before retrying.",
+        );
+      }
+      return {
+        id: `browser:${network}`,
+        type: getWalletTypeForNetwork(network),
+        privateKey: "",
+        address: browserAddress,
+      };
+    }
+  }
+
   const walletType = getWalletTypeForNetwork(network);
+  const walletId = getSelectedWalletId(walletType);
   const privateKey = readPrivateKeyFromConfig(walletId, walletType);
   const address = deriveAddressFromPrivateKey(privateKey, walletType);
   return {
@@ -446,7 +689,75 @@ export function getConfiguredWallet(network: NetworkKey): ConfiguredWallet {
 }
 
 export function getWalletAddress(network: NetworkKey): string {
+  assertTronModeConfirmed(network);
   return getConfiguredWallet(network).address;
+}
+
+export async function signTransactionWithWallet(unsignedTx: any, network: NetworkKey, _description?: string): Promise<any> {
+  const config = getNetworkConfig(network);
+  if (config.kind !== "tron") {
+    throw new Error(`signTransactionWithWallet currently supports TRON networks only. Received ${network}.`);
+  }
+
+  if (activeWalletMode === "browser") {
+    const signer = getBrowserSigner();
+    const connectedAddress = signer.getConnectedAddress();
+
+    // Verify the transaction's owner_address matches the connected browser wallet
+    const rawOwnerHex: string | undefined =
+      unsignedTx?.raw_data?.contract?.[0]?.parameter?.value?.owner_address;
+    if (rawOwnerHex && connectedAddress) {
+      const toBase58 = (addr: string) => {
+        try { return addr.startsWith("41") ? TronWeb.address.fromHex(addr) : addr; } catch { return addr; }
+      };
+      const normalizedTxOwner = toBase58(rawOwnerHex);
+      const normalizedConnected = toBase58(connectedAddress);
+      if (normalizedTxOwner && normalizedConnected && normalizedTxOwner !== normalizedConnected) {
+        throw new Error(
+          `Address mismatch: the transaction is built for ${normalizedConnected} but TronLink's active account appears to be different.\n` +
+          `Please switch TronLink to account ${normalizedConnected} before signing.`,
+        );
+      }
+    }
+
+    const { signedTransaction } = await signer.signTransaction(unsignedTx, toBrowserNetwork(network));
+
+    // 签名后校验：检测 TronLink 是否用了不同账户（如用户在弹窗中选择了"自定义授权"时可能切换账户）
+    if (signedTransaction) {
+      const returnedOwnerHex: string | undefined =
+        signedTransaction?.raw_data?.contract?.[0]?.parameter?.value?.owner_address;
+      if (returnedOwnerHex && connectedAddress) {
+        const toBase58 = (addr: string) => {
+          try { return addr.startsWith("41") ? TronWeb.address.fromHex(addr) : addr; } catch { return addr; }
+        };
+        const returnedOwner = toBase58(String(returnedOwnerHex));
+        const normalizedConnected = toBase58(connectedAddress);
+        if (returnedOwner && normalizedConnected && returnedOwner !== normalizedConnected) {
+          // 更新缓存地址，让用户下次重试时能正常匹配
+          signer.updateConnectedAddress(returnedOwner);
+          throw new Error(
+            `TronLink 使用了不同的账户签名（可能选择了"自定义授权"切换了账户）。\n` +
+            `期望账户: ${normalizedConnected}\n` +
+            `实际使用: ${returnedOwner}\n` +
+            `活跃钱包已更新为 ${returnedOwner}，请重新执行操作。`,
+          );
+        }
+      }
+    }
+
+    // 返回 TronLink 完整签名后的交易（包含其可能的修改），而非合并 signature 到原始 tx
+    return signedTransaction;
+  }
+
+  const wallet = getConfiguredWallet(network);
+  const signerClient = new TronWeb({
+    fullHost: config.rpcUrl,
+    solidityNode: config.rpcUrl,
+    eventServer: config.rpcUrl,
+    privateKey: wallet.privateKey,
+    headers: process.env.TRONGRID_API_KEY ? { "TRON-PRO-API-KEY": process.env.TRONGRID_API_KEY } : undefined,
+  });
+  return signerClient.trx.sign(unsignedTx);
 }
 
 export function getWalletStorePath() {

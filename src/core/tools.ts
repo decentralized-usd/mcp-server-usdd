@@ -288,6 +288,17 @@ export function registerUsddTools(server: McpServer) {
     }
   });
 
+  server.registerTool("get_psm_metrics", {
+    description: "Get PSM swap metrics by route, including fromToken/toToken/available/fee.",
+    inputSchema: { market: z.string().describe("PSM market like PSM-USDT"), network: networkField },
+  }, async ({ market, network }) => {
+    try {
+      return asText(await services.getPsmMetrics(resolveNetwork(network as NetworkKey), market));
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
   server.registerTool("get_user_vaults", {
     description: "List all vault IDs for the configured wallet or a given address.",
     inputSchema: { address: z.string().optional().describe("Optional wallet address"), network: networkField },
@@ -415,9 +426,10 @@ export function registerUsddTools(server: McpServer) {
       to: z.string().min(1).describe("Recipient address"),
       amount: z.string().min(1).describe("Human-readable amount, e.g. 0.1"),
       tokenAddress: z.string().optional().describe("Token contract address. Omit for native TRX transfer."),
+      decimals: z.number().int().positive().optional().describe("Optional token decimals override for non-standard/proxy tokens."),
       network: networkField,
     },
-  }, async ({ to, amount, tokenAddress, network }) => {
+  }, async ({ to, amount, tokenAddress, decimals, network }) => {
     try {
       const resolved = resolveNetwork(network as NetworkKey);
       const preview = await services.prepareTokenTransfer({
@@ -425,6 +437,7 @@ export function registerUsddTools(server: McpServer) {
         to,
         amount,
         tokenAddress,
+        decimals,
       });
       const id = `transfer_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
       const createdAt = new Date().toISOString();

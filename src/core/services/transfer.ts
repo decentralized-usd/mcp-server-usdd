@@ -19,6 +19,25 @@ export interface TokenTransferPreview {
   balanceRaw: string;
 }
 
+function resolveTokenDecimalsFromConfig(network: NetworkKey, tokenAddress: string): number | undefined {
+  const config = getNetworkConfig(network);
+  const normalize = (value: string) => utils.normalizeAddress(value, network);
+  const target = normalize(tokenAddress);
+
+  if (normalize(config.usdd) === target) return 18;
+  if (config.savings && normalize(config.savings.susdd) === target) return 18;
+
+  for (const ilk of Object.values(config.ilks)) {
+    if (ilk.gem && normalize(ilk.gem) === target) return ilk.decimals;
+  }
+
+  for (const market of Object.values(config.psmMarkets)) {
+    if (normalize(market.gem) === target) return market.decimals;
+  }
+
+  return undefined;
+}
+
 /**
  * Transfer TRX to an address.
  * @param amount - Amount in TRX (not Sun).
@@ -61,8 +80,9 @@ export async function prepareTokenTransfer(params: {
   to: string;
   amount: string;
   tokenAddress?: string;
+  decimals?: number;
 }): Promise<TokenTransferPreview> {
-  const { network, to, amount, tokenAddress } = params;
+  const { network, to, amount, tokenAddress, decimals: decimalsOverride } = params;
   const config = getConfiguredWallet(network);
   const chain = getNetworkConfig(network);
 
@@ -74,8 +94,25 @@ export async function prepareTokenTransfer(params: {
     const tronWeb = getPublicClient(network) as any;
     if (tokenAddress) {
       const contract = await tronWeb.contract().at(tokenAddress);
-      const decimals = Number(await contract.methods.decimals().call());
-      const symbol = String(await contract.methods.symbol().call());
+      let decimals = decimalsOverride;
+      if (decimals == null) {
+        try {
+          decimals = Number(await contract.methods.decimals().call());
+        } catch {
+          decimals = resolveTokenDecimalsFromConfig(network, tokenAddress);
+        }
+      }
+      if (decimals == null) {
+        throw new Error(
+          "Unable to detect token decimals from contract/config. Please retry with explicit decimals in prepare_token_transfer.",
+        );
+      }
+      let symbol = "TOKEN";
+      try {
+        symbol = String(await contract.methods.symbol().call());
+      } catch {
+        symbol = "TOKEN";
+      }
       const amountRaw = utils.parseUnits(amount, decimals).toString();
       const balanceRaw = BigInt(await contract.methods.balanceOf(config.address).call()).toString();
       const balance = utils.formatUnits(BigInt(balanceRaw), decimals);
@@ -125,17 +162,12 @@ export async function prepareTokenTransfer(params: {
 
   const publicClient = getPublicClient(network) as any;
   if (tokenAddress) {
-    const [decimalsRaw, symbolRaw, balanceRawBigInt] = await Promise.all([
-      publicClient.readContract({
-        address: tokenAddress,
-        abi: ERC20_ABI as any,
-        functionName: "decimals",
-      }),
+    const [symbolRaw, balanceRawBigInt] = await Promise.all([
       publicClient.readContract({
         address: tokenAddress,
         abi: ERC20_ABI as any,
         functionName: "symbol",
-      }),
+      }).catch(() => "TOKEN"),
       publicClient.readContract({
         address: tokenAddress,
         abi: ERC20_ABI as any,
@@ -143,7 +175,24 @@ export async function prepareTokenTransfer(params: {
         args: [config.address],
       }),
     ]);
-    const decimals = Number(decimalsRaw);
+    let decimals = decimalsOverride;
+    if (decimals == null) {
+      try {
+        const decimalsRaw = await publicClient.readContract({
+          address: tokenAddress,
+          abi: ERC20_ABI as any,
+          functionName: "decimals",
+        });
+        decimals = Number(decimalsRaw);
+      } catch {
+        decimals = resolveTokenDecimalsFromConfig(network, tokenAddress);
+      }
+    }
+    if (decimals == null) {
+      throw new Error(
+        "Unable to detect token decimals from contract/config. Please retry with explicit decimals in prepare_token_transfer.",
+      );
+    }
     const symbol = String(symbolRaw);
     const amountRaw = utils.parseUnits(amount, decimals).toString();
     const balanceRaw = BigInt(balanceRawBigInt).toString();

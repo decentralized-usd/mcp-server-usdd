@@ -28,6 +28,7 @@ const servicesMock = vi.hoisted(() => {
     getSupportedIlksData: vi.fn(),
     getOracleStatus: vi.fn(),
     getPsmStatus: vi.fn(),
+    getPsmMetrics: vi.fn(),
     getUserVaultIds: vi.fn(),
     getProxyAddress: vi.fn(),
     getVaultSummary: vi.fn(),
@@ -140,6 +141,7 @@ describe("registerUsddTools", () => {
       "get_supported_ilks",
       "get_oracle_status",
       "get_psm_status",
+      "get_psm_metrics",
       "get_user_vaults",
       "get_vault_summary",
       "analyze_vault_risk",
@@ -442,11 +444,15 @@ describe("registerUsddTools", () => {
     await expect(
       server.validateToolInput(server._registeredTools["get_psm_status"] as never, { network: "eth" }),
     ).rejects.toThrow();
+    await expect(
+      server.validateToolInput(server._registeredTools["get_psm_metrics"] as never, { network: "eth" }),
+    ).rejects.toThrow();
   });
 
   it("queries oracle, psm, savings, vault summary, and risk analysis", async () => {
     servicesMock.getOracleStatus.mockResolvedValue({ ilk: "TRX-A" });
     servicesMock.getPsmStatus.mockResolvedValue({ market: "PSM-USDT" });
+    servicesMock.getPsmMetrics.mockResolvedValue({ market: "PSM-USDT", routes: [] });
     servicesMock.getSavingsStatus.mockResolvedValue({ supported: true });
     servicesMock.getVaultSummary.mockResolvedValue({ cdpId: "123" });
     servicesMock.analyzeVaultRisk.mockResolvedValue({ warning: "ok" });
@@ -454,17 +460,20 @@ describe("registerUsddTools", () => {
 
     const oracle = await runTool(server, "get_oracle_status", { ilk: "TRX-A", network: "tron" });
     const psm = await runTool(server, "get_psm_status", { market: "PSM-USDT", network: "eth" });
+    const psmMetrics = await runTool(server, "get_psm_metrics", { market: "PSM-USDT", network: "eth" });
     const savings = await runTool(server, "get_savings_status", { network: "bsc" });
     const summary = await runTool(server, "get_vault_summary", { cdpId: "123", network: "tron" });
     const risk = await runTool(server, "analyze_vault_risk", { cdpId: "123", network: "tron" });
 
     expect(servicesMock.getOracleStatus).toHaveBeenCalledWith("tron", "TRX-A");
     expect(servicesMock.getPsmStatus).toHaveBeenCalledWith("eth", "PSM-USDT");
+    expect(servicesMock.getPsmMetrics).toHaveBeenCalledWith("eth", "PSM-USDT");
     expect(servicesMock.getSavingsStatus).toHaveBeenCalledWith("bsc");
     expect(servicesMock.getVaultSummary).toHaveBeenCalledWith("tron", 123n);
     expect(servicesMock.analyzeVaultRisk).toHaveBeenCalledWith("tron", 123n);
     expect(oracle.json.ilk).toBe("TRX-A");
     expect(psm.json.market).toBe("PSM-USDT");
+    expect(psmMetrics.json.market).toBe("PSM-USDT");
     expect(savings.json.supported).toBe(true);
     expect(summary.json.cdpId).toBe("123");
     expect(risk.json.warning).toBe("ok");

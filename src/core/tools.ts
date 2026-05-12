@@ -1,9 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { getSupportedNetworks, getSupportedIlks, getSupportedPsmMarkets, type NetworkKey } from "./chains.js";
+import { getSupportedNetworks, type NetworkKey } from "./chains.js";
 import * as services from "./services/index.js";
 
 type NetworkFamily = "tron" | "eth" | "bsc";
+type PendingTransfer = {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  preview: services.TokenTransferPreview;
+};
 
 function asText(data: unknown) {
   return { content: [{ type: "text" as const, text: services.utils.formatJson(data) }] };
@@ -19,6 +25,7 @@ const networkFamilyField = z.enum(["tron", "eth", "bsc"]).optional().describe("N
 const walletTypeField = z.enum(["tron", "evm"]).describe("Wallet family: tron or evm");
 const secretTypeField = z.enum(["private_key", "mnemonic"]).describe("Secret type to import");
 const walletModeField = z.enum(["browser", "agent"]).describe("Wallet signing mode");
+const pendingTransfers = new Map<string, PendingTransfer>();
 
 export function registerUsddTools(server: McpServer) {
   const resolveNetwork = (network?: NetworkKey): NetworkKey => network || services.getGlobalNetwork();
@@ -27,6 +34,30 @@ export function registerUsddTools(server: McpServer) {
     description: "List supported USDD networks.",
     inputSchema: {},
   }, async () => asText({ networks: getSupportedNetworks(), default: services.getGlobalNetwork() }));
+
+  server.registerTool("get_protocol_metrics", {
+    description: "Get aggregated protocol metrics from website data (mainnet).",
+    inputSchema: {},
+  }, async () => {
+    try {
+      return asText(await services.getProtocolMetrics());
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_chain_metrics", {
+    description: "Get chain-level core metrics from website data (mainnet).",
+    inputSchema: {
+      chain: z.enum(["tron", "eth", "bsc"]),
+    },
+  }, async ({ chain }) => {
+    try {
+      return asText(await services.getChainMetrics(chain));
+    } catch (error) {
+      return asError(error);
+    }
+  });
 
   server.registerTool("connect_browser_wallet", {
     description: "Connect a browser wallet (TronLink-compatible) and switch to browser mode.",
@@ -227,11 +258,13 @@ export function registerUsddTools(server: McpServer) {
   server.registerTool("get_supported_ilks", {
     description: "List configured collateral types and PSM joins for a network.",
     inputSchema: { network: networkField },
-  }, async ({ network }) => asText({
-    network: resolveNetwork(network as NetworkKey),
-    ilks: getSupportedIlks(resolveNetwork(network as NetworkKey)),
-    psmMarkets: getSupportedPsmMarkets(resolveNetwork(network as NetworkKey)),
-  }));
+  }, async ({ network }) => {
+    try {
+      return asText(await services.getSupportedIlksData(resolveNetwork(network as NetworkKey)));
+    } catch (error) {
+      return asError(error);
+    }
+  });
 
   server.registerTool("get_oracle_status", {
     description: "Inspect liquidation ratio, penalty, and oracle status for a collateral type.",
@@ -376,6 +409,78 @@ export function registerUsddTools(server: McpServer) {
     }
   });
 
+  server.registerTool("prepare_token_transfer", {
+    description: "Prepare a native/token transfer and return details for user confirmation before sending.",
+    inputSchema: {
+      to: z.string().min(1).describe("Recipient address"),
+      amount: z.string().min(1).describe("Human-readable amount, e.g. 0.1"),
+      tokenAddress: z.string().optional().describe("Token contract address. Omit for native TRX transfer."),
+      network: networkField,
+    },
+  }, async ({ to, amount, tokenAddress, network }) => {
+    try {
+      const resolved = resolveNetwork(network as NetworkKey);
+      const preview = await services.prepareTokenTransfer({
+        network: resolved,
+        to,
+        amount,
+        tokenAddress,
+      });
+      const id = `transfer_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      const createdAt = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      pendingTransfers.set(id, { id, createdAt, expiresAt, preview });
+
+      return asText({
+        confirmationId: id,
+        createdAt,
+        expiresAt,
+        walletMode: services.getWalletMode(resolved).mode,
+        transfer: preview,
+        nextStep: `If details are correct, call confirm_token_transfer with confirmationId=\"${id}\"`,
+      });
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("confirm_token_transfer", {
+    description: "Confirm and execute a previously prepared transfer.",
+    inputSchema: {
+      confirmationId: z.string().min(1).describe("ID returned by prepare_token_transfer"),
+      confirm: z.boolean().optional().describe("Set false to cancel this prepared transfer"),
+    },
+  }, async ({ confirmationId, confirm }) => {
+    try {
+      const pending = pendingTransfers.get(confirmationId);
+      if (!pending) {
+        throw new Error(`Unknown confirmationId: ${confirmationId}. Please run prepare_token_transfer again.`);
+      }
+      if (new Date(pending.expiresAt).getTime() < Date.now()) {
+        pendingTransfers.delete(confirmationId);
+        throw new Error("This confirmation has expired. Please run prepare_token_transfer again.");
+      }
+      if (confirm === false) {
+        pendingTransfers.delete(confirmationId);
+        return asText({
+          confirmationId,
+          status: "cancelled",
+          message: "Transfer cancelled by user confirmation flag.",
+        });
+      }
+
+      const result = await services.executeTokenTransfer(pending.preview);
+      pendingTransfers.delete(confirmationId);
+      return asText({
+        confirmationId,
+        status: "success",
+        result,
+      });
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
   server.registerTool("approve_token", {
     description: "Approve an ERC20/TRC20 token spender. Use before ERC20 collateral or PSM writes when needed.",
     inputSchema: {
@@ -507,6 +612,74 @@ export function registerUsddTools(server: McpServer) {
   }, async ({ amount, network }) => {
     try {
       return asText(await services.withdrawSavings(resolveNetwork(network as NetworkKey), amount));
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_treasury_summary", {
+    description: "Get latest USDD treasury report summary (mainnet data).",
+    inputSchema: {},
+  }, async () => {
+    try {
+      return asText(await services.getTreasurySummary());
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_jst_buyback_stats", {
+    description: "Get JST buyback/burn statistics from treasury report data (mainnet data).",
+    inputSchema: {},
+  }, async () => {
+    try {
+      return asText(await services.getJstBuybackStats());
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_smart_allocator_overview", {
+    description: "Get Smart Allocator overview (debt, invested amount, earnings, APY).",
+    inputSchema: {},
+  }, async () => {
+    try {
+      return asText(await services.getSmartAllocatorOverview());
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_assets_breakdown", {
+    description: "Get Smart Allocator invested-asset breakdown by protocol, network, or asset.",
+    inputSchema: {
+      dimension: z.enum(["protocol", "network", "asset"]),
+    },
+  }, async ({ dimension }) => {
+    try {
+      return asText(await services.getAssetsBreakdown(dimension));
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_proof_of_reserve", {
+    description: "Get Smart Allocator proof-of-reserve style platform investment details.",
+    inputSchema: {},
+  }, async () => {
+    try {
+      return asText(await services.getProofOfReserve());
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_debt_overview", {
+    description: "Get Smart Allocator debt overview grouped by network vault.",
+    inputSchema: {},
+  }, async () => {
+    try {
+      return asText(await services.getDebtOverview());
     } catch (error) {
       return asError(error);
     }

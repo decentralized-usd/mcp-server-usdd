@@ -25,6 +25,7 @@ const servicesMock = vi.hoisted(() => {
     getNetworkAlias: vi.fn(),
     getNetworkProfile: vi.fn(),
     getProtocolOverview: vi.fn(),
+    getSupportedIlksData: vi.fn(),
     getOracleStatus: vi.fn(),
     getPsmStatus: vi.fn(),
     getUserVaultIds: vi.fn(),
@@ -36,6 +37,8 @@ const servicesMock = vi.hoisted(() => {
     getNativeBalance: vi.fn(),
     getTokenBalance: vi.fn(),
     checkAllowance: vi.fn(),
+    prepareTokenTransfer: vi.fn(),
+    executeTokenTransfer: vi.fn(),
     approveToken: vi.fn(),
     depositAndMint: vi.fn(),
     drawUsdd: vi.fn(),
@@ -46,6 +49,14 @@ const servicesMock = vi.hoisted(() => {
     buyGemWithUsdd: vi.fn(),
     depositSavings: vi.fn(),
     withdrawSavings: vi.fn(),
+    getTreasurySummary: vi.fn(),
+    getJstBuybackStats: vi.fn(),
+    getSmartAllocatorOverview: vi.fn(),
+    getAssetsBreakdown: vi.fn(),
+    getProofOfReserve: vi.fn(),
+    getDebtOverview: vi.fn(),
+    getProtocolMetrics: vi.fn(),
+    getChainMetrics: vi.fn(),
   };
 });
 
@@ -114,6 +125,8 @@ describe("registerUsddTools", () => {
     const server = createServer();
     expect(Object.keys(server._registeredTools)).toEqual([
       "get_supported_networks",
+      "get_protocol_metrics",
+      "get_chain_metrics",
       "connect_browser_wallet",
       "set_wallet_mode",
       "get_wallet_mode",
@@ -135,6 +148,8 @@ describe("registerUsddTools", () => {
       "get_native_balance",
       "get_token_balance",
       "check_allowance",
+      "prepare_token_transfer",
+      "confirm_token_transfer",
       "approve_token",
       "deposit_and_mint",
       "mint_usdd",
@@ -145,6 +160,12 @@ describe("registerUsddTools", () => {
       "psm_swap_from_usdd",
       "deposit_savings",
       "withdraw_savings",
+      "get_treasury_summary",
+      "get_jst_buyback_stats",
+      "get_smart_allocator_overview",
+      "get_assets_breakdown",
+      "get_proof_of_reserve",
+      "get_debt_overview",
     ]);
   });
 
@@ -155,6 +176,103 @@ describe("registerUsddTools", () => {
       networks: ["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"],
       default: "tron",
     });
+  });
+
+  it("routes get_supported_ilks through service data source", async () => {
+    servicesMock.getSupportedIlksData.mockResolvedValue({
+      network: "tron",
+      source: "mainnet_api",
+      ilks: [{ key: "TRX-A" }],
+      psmMarkets: [{ key: "PSM-USDT" }],
+    });
+    const server = createServer();
+    const result = await runTool(server, "get_supported_ilks", { network: "tron" });
+
+    expect(servicesMock.getSupportedIlksData).toHaveBeenCalledWith("tron");
+    expect(result.json.source).toBe("mainnet_api");
+    expect(result.json.ilks[0].key).toBe("TRX-A");
+  });
+
+  it("returns protocol metrics without daily change fields", async () => {
+    servicesMock.getProtocolMetrics.mockResolvedValue({
+      totalSupply: "1484075974.694952241043729374318089087586026739302249149",
+      protocolTVL: "2261428046.53",
+      savingTVL: "272744387.079828252613224316318089087586026739302249149",
+      SAEarning: "17002367.2113854565532816",
+      source: "mainnet",
+    });
+    const server = createServer();
+    const result = await runTool(server, "get_protocol_metrics");
+
+    expect(servicesMock.getProtocolMetrics).toHaveBeenCalledTimes(1);
+    expect(result.json.totalSupply).toBeDefined();
+    expect(result.json.savingTVL).toBeDefined();
+    expect(result.json.totalSupplyValueDailyChange).toBeUndefined();
+    expect(result.json.earnTvlDailyChange).toBeUndefined();
+  });
+
+  it("returns chain metrics with chain-specific TVL/APY fields", async () => {
+    servicesMock.getChainMetrics.mockResolvedValueOnce({
+      chain: "tron",
+      totalSupply: "1148259496.372048861948474321",
+      totalCollateralValue: "1925016728.12",
+      earnAPY: "0.04",
+      source: "mainnet",
+    });
+    servicesMock.getChainMetrics.mockResolvedValueOnce({
+      chain: "eth",
+      totalSupply: "318132548.133582740347638420766866023203624082619214985",
+      totalCollateralValue: "318689421.22",
+      savingsAPY: "0.04000000189078800616471198737",
+      savingsTVL: "258732048.040066462010430160766866023203624082619214985",
+      source: "mainnet",
+    });
+
+    const server = createServer();
+    const tron = await runTool(server, "get_chain_metrics", { chain: "tron" });
+    const eth = await runTool(server, "get_chain_metrics", { chain: "eth" });
+
+    expect(servicesMock.getChainMetrics).toHaveBeenNthCalledWith(1, "tron");
+    expect(servicesMock.getChainMetrics).toHaveBeenNthCalledWith(2, "eth");
+    expect(tron.json.earnAPY).toBeDefined();
+    expect(tron.json.savingsTVL).toBeUndefined();
+    expect(eth.json.savingsTVL).toBeDefined();
+    expect(eth.json.earnAPY).toBeUndefined();
+  });
+
+  it("requires explicit confirmation before token transfer execution", async () => {
+    servicesMock.prepareTokenTransfer.mockResolvedValue({
+      network: "tron",
+      from: "TFrom",
+      to: "TTo",
+      assetType: "native",
+      amount: "1",
+      amountRaw: "1000000",
+      symbol: "TRX",
+      decimals: 6,
+      balance: "100",
+      balanceRaw: "100000000",
+    });
+    servicesMock.executeTokenTransfer.mockResolvedValue({
+      txHash: "mock_tx_hash",
+    });
+    const server = createServer();
+
+    const prepared = await runTool(server, "prepare_token_transfer", {
+      to: "TTo",
+      amount: "1",
+      network: "tron",
+    });
+    const confirmationId = prepared.json.confirmationId;
+    expect(confirmationId).toBeTruthy();
+    expect(prepared.json.transfer.amount).toBe("1");
+
+    const confirmed = await runTool(server, "confirm_token_transfer", {
+      confirmationId,
+    });
+    expect(servicesMock.executeTokenTransfer).toHaveBeenCalledTimes(1);
+    expect(confirmed.json.status).toBe("success");
+    expect(confirmed.json.result.txHash).toBe("mock_tx_hash");
   });
 
   it("supports wallet mode and global network tools", async () => {
@@ -458,6 +576,42 @@ describe("registerUsddTools", () => {
     expect(servicesMock.withdrawCollateral).toHaveBeenCalledWith("tron", 42n, "TRX-A", "1");
     expect(servicesMock.closeVault).toHaveBeenCalledWith("tron", 42n, "TRX-A", "999");
     expect(closed.json.txID).toBe("0xclose");
+  });
+
+  it("returns treasury summary and JST buyback stats", async () => {
+    servicesMock.getTreasurySummary.mockResolvedValue({ quarter: "2026 Q1", netIncome: "-6102868" });
+    servicesMock.getJstBuybackStats.mockResolvedValue({ totalBurned: "0", latestBatchDate: "2026-Q1" });
+    const server = createServer();
+
+    const summary = await runTool(server, "get_treasury_summary");
+    const buyback = await runTool(server, "get_jst_buyback_stats");
+
+    expect(servicesMock.getTreasurySummary).toHaveBeenCalledTimes(1);
+    expect(servicesMock.getJstBuybackStats).toHaveBeenCalledTimes(1);
+    expect(summary.json.quarter).toBe("2026 Q1");
+    expect(buyback.json.totalBurned).toBe("0");
+  });
+
+  it("returns smart allocator overview/breakdown/proof/debt", async () => {
+    servicesMock.getSmartAllocatorOverview.mockResolvedValue({ apy: "3.4710", debtUsdd: "837933499" });
+    servicesMock.getAssetsBreakdown.mockResolvedValue({ dimension: "protocol", items: [{ name: "Aave", value: "1", percentage: "100" }] });
+    servicesMock.getProofOfReserve.mockResolvedValue({ items: [{ platform: "Aave", investedAmount: "1" }] });
+    servicesMock.getDebtOverview.mockResolvedValue({ items: [{ network: "tron", totalDebt: "1" }] });
+    const server = createServer();
+
+    const overview = await runTool(server, "get_smart_allocator_overview");
+    const breakdown = await runTool(server, "get_assets_breakdown", { dimension: "protocol" });
+    const proof = await runTool(server, "get_proof_of_reserve");
+    const debt = await runTool(server, "get_debt_overview");
+
+    expect(servicesMock.getSmartAllocatorOverview).toHaveBeenCalledTimes(1);
+    expect(servicesMock.getAssetsBreakdown).toHaveBeenCalledWith("protocol");
+    expect(servicesMock.getProofOfReserve).toHaveBeenCalledTimes(1);
+    expect(servicesMock.getDebtOverview).toHaveBeenCalledTimes(1);
+    expect(overview.json.debtUsdd).toBe("837933499");
+    expect(breakdown.json.dimension).toBe("protocol");
+    expect(proof.json.items).toHaveLength(1);
+    expect(debt.json.items).toHaveLength(1);
   });
 
   it("routes psm and savings writes to the expected services", async () => {

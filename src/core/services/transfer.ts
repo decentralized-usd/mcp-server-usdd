@@ -1,7 +1,23 @@
 import { ERC20_ABI } from "../abis.js";
-import { type NetworkKey } from "../chains.js";
-import { getWalletClient } from "./clients.js";
+import { getNetworkConfig, type NetworkKey } from "../chains.js";
+import { getPublicClient, getWalletClient } from "./clients.js";
+import { writeContract } from "./contracts.js";
 import { utils } from "./utils.js";
+import { assertWalletReadyForWrite, getConfiguredWallet, getWalletAddress, signTransactionWithWallet } from "./wallet.js";
+
+export interface TokenTransferPreview {
+  network: NetworkKey;
+  from: string;
+  to: string;
+  assetType: "native" | "token";
+  amount: string;
+  amountRaw: string;
+  symbol: string;
+  decimals: number;
+  tokenAddress?: string;
+  balance: string;
+  balanceRaw: string;
+}
 
 /**
  * Transfer TRX to an address.
@@ -38,6 +54,201 @@ export async function transferTRX(
     return (tx as any).txID;
   }
   throw new Error(`Transaction failed: ${JSON.stringify(tx)}`);
+}
+
+export async function prepareTokenTransfer(params: {
+  network: NetworkKey;
+  to: string;
+  amount: string;
+  tokenAddress?: string;
+}): Promise<TokenTransferPreview> {
+  const { network, to, amount, tokenAddress } = params;
+  const config = getConfiguredWallet(network);
+  const chain = getNetworkConfig(network);
+
+  if (!amount || Number(amount) <= 0) {
+    throw new Error("Amount must be greater than 0.");
+  }
+
+  if (chain.kind === "tron") {
+    const tronWeb = getPublicClient(network) as any;
+    if (tokenAddress) {
+      const contract = await tronWeb.contract().at(tokenAddress);
+      const decimals = Number(await contract.methods.decimals().call());
+      const symbol = String(await contract.methods.symbol().call());
+      const amountRaw = utils.parseUnits(amount, decimals).toString();
+      const balanceRaw = BigInt(await contract.methods.balanceOf(config.address).call()).toString();
+      const balance = utils.formatUnits(BigInt(balanceRaw), decimals);
+
+      if (BigInt(balanceRaw) < BigInt(amountRaw)) {
+        throw new Error(`Insufficient ${symbol} balance. Have ${balance}, need ${amount}.`);
+      }
+
+      return {
+        network,
+        from: config.address,
+        to,
+        assetType: "token",
+        amount,
+        amountRaw,
+        symbol,
+        decimals,
+        tokenAddress,
+        balance,
+        balanceRaw,
+      };
+    }
+
+    const decimals = 6;
+    const symbol = "TRX";
+    const amountRaw = utils.parseUnits(amount, decimals).toString();
+    const balanceRaw = BigInt(await tronWeb.trx.getBalance(config.address)).toString();
+    const balance = utils.formatUnits(BigInt(balanceRaw), decimals);
+
+    if (BigInt(balanceRaw) < BigInt(amountRaw)) {
+      throw new Error(`Insufficient ${symbol} balance. Have ${balance}, need ${amount}.`);
+    }
+
+    return {
+      network,
+      from: config.address,
+      to,
+      assetType: "native",
+      amount,
+      amountRaw,
+      symbol,
+      decimals,
+      balance,
+      balanceRaw,
+    };
+  }
+
+  const publicClient = getPublicClient(network) as any;
+  if (tokenAddress) {
+    const [decimalsRaw, symbolRaw, balanceRawBigInt] = await Promise.all([
+      publicClient.readContract({
+        address: tokenAddress,
+        abi: ERC20_ABI as any,
+        functionName: "decimals",
+      }),
+      publicClient.readContract({
+        address: tokenAddress,
+        abi: ERC20_ABI as any,
+        functionName: "symbol",
+      }),
+      publicClient.readContract({
+        address: tokenAddress,
+        abi: ERC20_ABI as any,
+        functionName: "balanceOf",
+        args: [config.address],
+      }),
+    ]);
+    const decimals = Number(decimalsRaw);
+    const symbol = String(symbolRaw);
+    const amountRaw = utils.parseUnits(amount, decimals).toString();
+    const balanceRaw = BigInt(balanceRawBigInt).toString();
+    const balance = utils.formatUnits(BigInt(balanceRaw), decimals);
+
+    if (BigInt(balanceRaw) < BigInt(amountRaw)) {
+      throw new Error(`Insufficient ${symbol} balance. Have ${balance}, need ${amount}.`);
+    }
+
+    return {
+      network,
+      from: config.address,
+      to,
+      assetType: "token",
+      amount,
+      amountRaw,
+      symbol,
+      decimals,
+      tokenAddress,
+      balance,
+      balanceRaw,
+    };
+  }
+
+  const decimals = 18;
+  const symbol = chain.nativeSymbol;
+  const amountRaw = utils.parseUnits(amount, decimals).toString();
+  const balanceRaw = BigInt(await publicClient.getBalance({ address: config.address })).toString();
+  const balance = utils.formatUnits(BigInt(balanceRaw), decimals);
+  if (BigInt(balanceRaw) < BigInt(amountRaw)) {
+    throw new Error(`Insufficient ${symbol} balance. Have ${balance}, need ${amount}.`);
+  }
+
+  return {
+    network,
+    from: config.address,
+    to,
+    assetType: "native",
+    amount,
+    amountRaw,
+    symbol,
+    decimals,
+    balance,
+    balanceRaw,
+  };
+}
+
+export async function executeTokenTransfer(preview: TokenTransferPreview) {
+  assertWalletReadyForWrite(preview.network);
+
+  if (preview.assetType === "token") {
+    const result = await writeContract({
+      network: preview.network,
+      address: preview.tokenAddress!,
+      abi: ERC20_ABI,
+      functionName: "transfer",
+      args: [preview.to, BigInt(preview.amountRaw)],
+    });
+    return {
+      ...preview,
+      txHash: result.txID,
+      receipt: result.receipt,
+    };
+  }
+
+  const chain = getNetworkConfig(preview.network);
+  if (chain.kind === "tron") {
+    const tronWeb = getPublicClient(preview.network) as any;
+    const owner = getWalletAddress(preview.network);
+    const unsignedTx = await tronWeb.transactionBuilder.sendTrx(
+      preview.to,
+      Number(preview.amountRaw),
+      owner,
+    );
+    const signedTx = await signTransactionWithWallet(unsignedTx, preview.network, "native_transfer");
+    const broadcast = await tronWeb.trx.sendRawTransaction(signedTx);
+    if (!broadcast?.result) {
+      throw new Error(`Broadcast failed: ${JSON.stringify(broadcast)}`);
+    }
+
+    return {
+      ...preview,
+      txHash: broadcast.txid || broadcast.transaction?.txID || unsignedTx.txID,
+      broadcast,
+    };
+  }
+
+  const walletClient = getWalletClient(preview.network) as any;
+  if (!walletClient.account) {
+    throw new Error(`Wallet client for ${preview.network} is missing a local account for signing.`);
+  }
+  const hash = await walletClient.sendTransaction({
+    account: walletClient.account,
+    to: preview.to,
+    value: BigInt(preview.amountRaw),
+    chain: walletClient.chain,
+  });
+  const publicClient = getPublicClient(preview.network) as any;
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+  return {
+    ...preview,
+    txHash: hash,
+    receipt,
+  };
 }
 
 /**

@@ -58,6 +58,7 @@ const servicesMock = vi.hoisted(() => {
     getDebtOverview: vi.fn(),
     getProtocolMetrics: vi.fn(),
     getChainMetrics: vi.fn(),
+    getCollateralPrices: vi.fn(),
   };
 });
 
@@ -128,6 +129,7 @@ describe("registerUsddTools", () => {
       "get_supported_networks",
       "get_protocol_metrics",
       "get_chain_metrics",
+      "get_collateral_prices",
       "connect_browser_wallet",
       "set_wallet_mode",
       "get_wallet_mode",
@@ -211,6 +213,19 @@ describe("registerUsddTools", () => {
     expect(result.json.savingTVL).toBeDefined();
     expect(result.json.totalSupplyValueDailyChange).toBeUndefined();
     expect(result.json.earnTvlDailyChange).toBeUndefined();
+  });
+
+  it("returns collateral highest-price data", async () => {
+    servicesMock.getCollateralPrices.mockResolvedValue({
+      source: "mainnet_api",
+      items: [{ collateral: "TRX-A", highestPrice: "1.23" }],
+    });
+    const server = createServer();
+    const result = await runTool(server, "get_collateral_prices");
+
+    expect(servicesMock.getCollateralPrices).toHaveBeenCalledTimes(1);
+    expect(result.json.source).toBe("mainnet_api");
+    expect(result.json.items[0].collateral).toBe("TRX-A");
   });
 
   it("returns chain metrics with chain-specific TVL/APY fields", async () => {

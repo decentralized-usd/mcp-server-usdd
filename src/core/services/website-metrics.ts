@@ -2,6 +2,7 @@ import { getSupportedIlks, getSupportedPsmMarkets, type NetworkKey } from "../ch
 
 const OVERVIEW_INFO_URL = "https://app-api.usdd.io/data-platform/overview/info";
 const LATEST_COLLATERAL_URL = "https://app-api.usdd.io/data-platform/latest-collateral";
+const HIGHEST_PRICE_URL = "https://app-api.usdd.io/liquid/highestprice";
 const VAULT_COLLATERALS_URL = "https://app-api.usdd.io/vault/collaterals";
 const CACHE_TTL_MS = 60 * 1000;
 const REQUEST_TIMEOUT_MS = 3000;
@@ -23,6 +24,7 @@ type OverviewInfoApiResponse = {
 
 let overviewCache: { expiresAt: number; data: OverviewInfoApiResponse["data"] } | null = null;
 const latestCollateralCache = new Map<string, { expiresAt: number; data: any }>();
+let highestPriceCache: { expiresAt: number; data: any } | null = null;
 let vaultCollateralsCache: { expiresAt: number; data: any } | null = null;
 
 async function fetchOverviewInfo() {
@@ -99,6 +101,35 @@ export async function getChainMetrics(chain: "tron" | "eth" | "bsc") {
     ...base,
     savingsAPY: String(data.apy ?? "0"),
     savingsTVL: String(data.earnTvl ?? "0"),
+  };
+}
+
+async function fetchHighestCollateralPrice() {
+  const now = Date.now();
+  if (highestPriceCache && highestPriceCache.expiresAt > now) return highestPriceCache.data;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(HIGHEST_PRICE_URL, { signal: controller.signal });
+    if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
+    const json = await response.json() as { code: number; data: any; message: string };
+    if (json.code !== 0 || !json.data) throw new Error(json.message || "Invalid highestprice response");
+    highestPriceCache = { data: json.data, expiresAt: now + CACHE_TTL_MS };
+    return json.data;
+  } catch (error: any) {
+    if (error?.name === "AbortError") throw new Error("Highestprice API timeout (>3s)");
+    throw new Error(`Highestprice API request failed: ${error?.message || String(error)}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function getCollateralPrices() {
+  const data = await fetchHighestCollateralPrice();
+  return {
+    source: "mainnet_api",
+    ...data,
   };
 }
 

@@ -59,6 +59,17 @@ export function registerUsddTools(server: McpServer) {
     }
   });
 
+  server.registerTool("get_collateral_prices", {
+    description: "Get latest collateral highest-price data from website API (mainnet).",
+    inputSchema: {},
+  }, async () => {
+    try {
+      return asText(await services.getCollateralPrices());
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
   server.registerTool("connect_browser_wallet", {
     description: "Connect a browser wallet (TronLink-compatible) and switch to browser mode.",
     inputSchema: {

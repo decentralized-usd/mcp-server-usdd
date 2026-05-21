@@ -432,7 +432,7 @@ export function registerUsddTools(server: McpServer) {
   });
 
   server.registerTool("prepare_token_transfer", {
-    description: "Prepare a native/token transfer and return details for user confirmation before sending.",
+    description: "Prepare a native/token transfer and return a preview for user review. After calling this tool, you MUST present the transfer details to the user and wait for their explicit confirmation before calling confirm_token_transfer. Do NOT proceed automatically.",
     inputSchema: {
       to: z.string().min(1).describe("Recipient address"),
       amount: z.string().min(1).describe("Human-readable amount, e.g. 0.1"),
@@ -469,10 +469,10 @@ export function registerUsddTools(server: McpServer) {
   });
 
   server.registerTool("confirm_token_transfer", {
-    description: "Confirm and execute a previously prepared transfer.",
+    description: "Execute a previously prepared transfer. IMPORTANT: MUST ONLY be called after the human user has explicitly reviewed the prepare_token_transfer output and verbally confirmed they want to proceed (e.g. 'yes', 'confirm', 'go ahead'). Never call this automatically right after prepare_token_transfer — always wait for the user's explicit approval first.",
     inputSchema: {
       confirmationId: z.string().min(1).describe("ID returned by prepare_token_transfer"),
-      confirm: z.boolean().optional().describe("Set false to cancel this prepared transfer"),
+      confirm: z.boolean().describe("Must be true to execute. Pass false to cancel."),
     },
   }, async ({ confirmationId, confirm }) => {
     try {

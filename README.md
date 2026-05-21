@@ -6,17 +6,19 @@
 ![MCP](https://img.shields.io/badge/MCP-1.22.0+-blue)
 ![USDD](https://img.shields.io/badge/Protocol-USDD-green)
 
-An MCP server for the **USDD protocol** across **TRON, Ethereum, and BNB Smart Chain** (plus internal testnets). The current version focuses on three core surfaces: **Vault/CDP**, **PSM**, and **USDD Savings**.
+An MCP server for the **USDD protocol** across **TRON, Ethereum, and BNB Smart Chain** (plus internal testnets). Covers **Vault/CDP**, **PSM**, **USDD Savings**, **token transfers**, and **protocol analytics**.
 
 ## Scope
 
-Current implementation focuses on:
+Current implementation covers:
 
 - Vault lifecycle: open, deposit collateral, mint USDD, repay, withdraw, close
-- PSM lifecycle: inspect fees, swap into USDD, swap out of USDD
+- PSM lifecycle: inspect fees and routes, swap into USDD, swap out of USDD
 - Savings lifecycle: inspect USDD Savings, deposit, withdraw
 - Risk and monitoring for vaults: summaries, oracle status, collateral buffers
 - Token preflight checks: balances, allowances, approvals
+- Token transfers: two-step preview → confirm flow for TRX, TRC20, and EVM native/ERC20
+- Protocol analytics: chain metrics, collateral prices, PSM route metrics, treasury, Smart Allocator, proof of reserve
 
 ## Supported Networks
 
@@ -209,6 +211,7 @@ Add to .cursor/mcp.json:
 | Tool | Description | Write? |
 |---|---|---|
 | `get_psm_status` | Inspect PSM fees and enablement | No |
+| `get_psm_metrics` | Get PSM swap metrics by route (fromToken/toToken/available/fee) | No |
 | `psm_swap_to_usdd` | Swap gem into USDD | Yes |
 | `psm_swap_from_usdd` | Swap USDD into gem | Yes |
 
@@ -219,6 +222,48 @@ Add to .cursor/mcp.json:
 | `get_savings_status` | Show USDD Savings metrics | No |
 | `deposit_savings` | Deposit USDD into `sUSDD` | Yes |
 | `withdraw_savings` | Withdraw USDD from `sUSDD` | Yes |
+
+### Token Transfers
+
+Two-step preview → confirm flow for safe asset transfers. The AI **must** present the transfer details to the user and wait for explicit confirmation before executing.
+
+| Tool | Description | Write? |
+|---|---|---|
+| `prepare_token_transfer` | Preview a native or token transfer; returns a `confirmationId` and transfer details for user review | No |
+| `confirm_token_transfer` | Execute a previously prepared transfer after user has explicitly confirmed | Yes |
+
+Supports:
+- **TRX** (TRON native)
+- **TRC20** tokens (USDD, USDT, WBTC, etc.)
+- **ETH / BNB** (EVM native)
+- **ERC20** tokens on Ethereum and BSC
+
+### Protocol Metrics
+
+Read-only analytics from mainnet data feeds.
+
+| Tool | Description | Write? |
+|---|---|---|
+| `get_protocol_metrics` | Aggregated USDD protocol metrics (mainnet) | No |
+| `get_chain_metrics` | Chain-level metrics for `tron`, `eth`, or `bsc` | No |
+| `get_collateral_prices` | Latest collateral highest-price data from website API | No |
+| `get_psm_metrics` | PSM route metrics: fromToken, toToken, available liquidity, fees | No |
+
+### Treasury
+
+| Tool | Description | Write? |
+|---|---|---|
+| `get_treasury_summary` | Latest USDD treasury report summary (mainnet) | No |
+| `get_jst_buyback_stats` | JST buyback and burn statistics from treasury data | No |
+
+### Smart Allocator
+
+| Tool | Description | Write? |
+|---|---|---|
+| `get_smart_allocator_overview` | Smart Allocator overview: debt, invested amount, earnings, APY | No |
+| `get_assets_breakdown` | Invested-asset breakdown by `protocol`, `network`, or `asset` | No |
+| `get_proof_of_reserve` | Proof-of-reserve style platform investment details | No |
+| `get_debt_overview` | Debt overview grouped by network vault | No |
 
 ## Prompts
 
@@ -242,6 +287,7 @@ mcp-server-usdd/
 │   │   ├── tools.ts
 │   │   ├── prompts.ts
 │   │   ├── resources.ts
+│   │   ├── browser-signer.ts
 │   │   └── services/
 │   │       ├── clients.ts
 │   │       ├── contracts.ts
@@ -250,6 +296,10 @@ mcp-server-usdd/
 │   │       ├── psm.ts
 │   │       ├── savings.ts
 │   │       ├── tokens.ts
+│   │       ├── transfer.ts        ← token/native transfer (prepare + confirm)
+│   │       ├── treasury.ts        ← treasury report and JST buyback stats
+│   │       ├── smart-allocator.ts ← Smart Allocator analytics
+│   │       ├── website-metrics.ts ← protocol metrics, chain metrics, collateral prices
 │   │       ├── wallet.ts
 │   │       └── utils.ts
 │   ├── index.ts
@@ -265,6 +315,9 @@ mcp-server-usdd/
 - All tools default to the family-specific defaults set by `set_network`; if `network` is omitted, tron-family default is used unless the tool call explicitly passes `network`.
 - ERC20/TRC20 flows often require `approve_token` first.
 - Browser mode now supports real transaction signing on TRON networks (`tron`, `tron_nile`) via `tronlink-signer` (TronLink/TIP-6963 flow). EVM networks currently continue to use agent-wallet signing.
+- `deposit_and_mint` is idempotent with respect to vault creation: it checks for an existing vault for the given ilk before opening a new one. If no vault exists, it submits two separate transactions — `open` then `lockGemAndDraw` — to avoid combined-tx reliability issues on TRON.
+- Token transfers use a two-step flow: `prepare_token_transfer` returns a preview and `confirmationId`; `confirm_token_transfer` executes only after the user explicitly approves. Pending confirmations expire after 10 minutes.
+- Protocol analytics tools (`get_protocol_metrics`, `get_chain_metrics`, `get_collateral_prices`, etc.) read from mainnet data feeds only — they do not reflect testnet state.
 - TRON, ETH, BSC, and internal testnet deployments have similar protocol structure but different addresses and token decimals.
 - This version intentionally excludes migration and auction actions so we can iterate the Vault + PSM + USDD Savings core first.
 
@@ -281,19 +334,42 @@ mcp-server-usdd/
 
 ## Example Conversations
 
-- "What vault types are available on Ethereum?" -> AI calls `get_supported_ilks` with `network=eth` and summarizes the supported vault collateral types.
-- "Open a TRX-A/USDT-A/WBTC-A vault on Tron and mint 500 USDD" -> AI uses `open_usdd_vault`: checks wallet, reviews oracle status, executes `deposit_and_mint`, then verifies the new vault risk.
-- "Am I close to liquidation on vault 123?" -> AI calls `get_vault_summary` and `analyze_vault_risk`, then explains the health factor and collateral buffer.
-- "Repay part of my vault debt on BSC" -> AI uses `manage_vault_lifecycle` with `action=repay`: checks USDD balance and allowance, calls `repay_usdd`, then verifies the updated vault state.
-- "Close my vault and withdraw the collateral" -> AI uses `repay_and_close_vault`: checks debt, balance, allowance, calls `close_vault`, then confirms the vault state after repayment.
-- "What are the current PSM fees on Ethereum?" -> AI calls `get_psm_status` with `network=eth` and reports fee-in, fee-out, and whether swaps are enabled.
-- "Swap 10,000 USDT into USDD through the PSM" -> AI uses `use_psm`: checks PSM status, then calls `psm_swap_to_usdd` and reports the transaction result.
-- "Swap 5,000 USDD back to USDC on BSC" -> AI calls `get_psm_status`, then executes `psm_swap_from_usdd` and reminds the user to re-check balances.
-- "What is my USDD balance on Tron?" -> AI calls `get_protocol_overview` to identify the USDD token address, then calls `get_token_balance`.
-- "Do I have enough allowance for the USDT PSM?" -> AI calls `check_allowance` with the token and PSM spender, then suggests `approve_token` only if needed.
-- "What is the current USDD Savings status on Ethereum?" -> AI calls `get_savings_status` and summarizes total assets, savings rate, and wallet shares.
-- "Deposit 2,000 USDD into sUSDD" -> AI uses `use_savings`: checks savings status, calls `deposit_savings`, then re-checks savings metrics.
-- "Withdraw 500 USDD from sUSDD on BSC" -> AI calls `get_savings_status`, executes `withdraw_savings`, and confirms the updated share balance.
+**Vault**
+- "What vault types are available on Ethereum?" → AI calls `get_supported_ilks` with `network=eth` and summarizes the supported vault collateral types.
+- "Open a TRX-A/USDT-A/WBTC-A vault on Tron and mint 500 USDD" → AI uses `open_usdd_vault`: checks wallet, reviews oracle status, executes `deposit_and_mint` (auto-opens a new vault if none exists for that ilk), then verifies the new vault risk.
+- "Am I close to liquidation on vault 123?" → AI calls `get_vault_summary` and `analyze_vault_risk`, then explains the health factor and collateral buffer.
+- "Repay part of my vault debt on BSC" → AI uses `manage_vault_lifecycle` with `action=repay`: checks USDD balance and allowance, calls `repay_usdd`, then verifies the updated vault state.
+- "Close my vault and withdraw the collateral" → AI uses `repay_and_close_vault`: checks debt, balance, allowance, calls `close_vault`, then confirms the vault state after repayment.
+
+**PSM**
+- "What are the current PSM fees on Ethereum?" → AI calls `get_psm_status` with `network=eth` and reports fee-in, fee-out, and whether swaps are enabled.
+- "Show me available PSM liquidity for USDT on TRON" → AI calls `get_psm_metrics` with the PSM-USDT market and reports available amounts and fees for both directions.
+- "Swap 10,000 USDT into USDD through the PSM" → AI uses `use_psm`: checks PSM status, then calls `psm_swap_to_usdd` and reports the transaction result.
+- "Swap 5,000 USDD back to USDC on BSC" → AI calls `get_psm_status`, then executes `psm_swap_from_usdd` and reminds the user to re-check balances.
+
+**Token & Balances**
+- "What is my USDD balance on Tron?" → AI calls `get_protocol_overview` to identify the USDD token address, then calls `get_token_balance`.
+- "Do I have enough allowance for the USDT PSM?" → AI calls `check_allowance` with the token and PSM spender, then suggests `approve_token` only if needed.
+- "Send 100 USDD to TXxxx... on Tron" → AI calls `prepare_token_transfer` and displays the transfer preview (from, to, amount, balance). After the user confirms, AI calls `confirm_token_transfer` to execute.
+- "Transfer 0.5 ETH to 0xabc..." → AI calls `prepare_token_transfer` for native ETH, presents the details, then waits for user approval before executing.
+
+**USDD Savings**
+- "What is the current USDD Savings status on Ethereum?" → AI calls `get_savings_status` and summarizes total assets, savings rate, and wallet shares.
+- "Deposit 2,000 USDD into sUSDD" → AI uses `use_savings`: checks savings status, calls `deposit_savings`, then re-checks savings metrics.
+- "Withdraw 500 USDD from sUSDD on BSC" → AI calls `get_savings_status`, executes `withdraw_savings`, and confirms the updated share balance.
+
+**Protocol Analytics**
+- "What are the overall USDD protocol metrics?" → AI calls `get_protocol_metrics` and reports total collateral, debt ceiling, and utilization.
+- "Show me TRON chain metrics" → AI calls `get_chain_metrics` with `chain=tron` and summarizes collateral breakdown and USDD supply on TRON.
+- "What are the latest collateral prices?" → AI calls `get_collateral_prices` and lists each collateral type with its current highest price.
+
+**Treasury & Smart Allocator**
+- "Show me the USDD treasury summary" → AI calls `get_treasury_summary` and reports reserve breakdown, collateral ratio, and recent changes.
+- "How much JST has been bought back and burned?" → AI calls `get_jst_buyback_stats` and summarizes cumulative JST buyback volume and burn totals.
+- "What is the Smart Allocator overview?" → AI calls `get_smart_allocator_overview` and reports total debt allocated, current invested amount, accumulated earnings, and APY.
+- "Break down Smart Allocator investments by protocol" → AI calls `get_assets_breakdown` with `dimension=protocol` and lists each DeFi protocol with its allocated amount.
+- "Show me the Smart Allocator proof of reserve" → AI calls `get_proof_of_reserve` and details each platform investment with amounts and verification status.
+- "What does the Smart Allocator debt look like by network?" → AI calls `get_debt_overview` and summarizes debt positions grouped by TRON/ETH/BSC vaults.
 
 ## License
 

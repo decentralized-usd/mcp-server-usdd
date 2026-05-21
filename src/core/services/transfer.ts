@@ -1,7 +1,7 @@
 import { ERC20_ABI } from "../abis.js";
 import { getNetworkConfig, type NetworkKey } from "../chains.js";
 import { getPublicClient, getWalletClient } from "./clients.js";
-import { writeContract } from "./contracts.js";
+import { readContract, writeContract } from "./contracts.js";
 import { utils } from "./utils.js";
 import { assertWalletReadyForWrite, getConfiguredWallet, getWalletAddress, signTransactionWithWallet } from "./wallet.js";
 
@@ -17,6 +17,28 @@ export interface TokenTransferPreview {
   tokenAddress?: string;
   balance: string;
   balanceRaw: string;
+}
+
+async function readTronContractValue(contract: any, fn: string, args: any[] = []): Promise<any> {
+  const methodCandidate = contract?.methods?.[fn];
+  if (typeof methodCandidate === "function") {
+    const methodCall = methodCandidate(...args);
+    if (methodCall && typeof methodCall.call === "function") {
+      return methodCall.call();
+    }
+    return methodCall;
+  }
+
+  const directCandidate = contract?.[fn];
+  if (typeof directCandidate === "function") {
+    const directCall = directCandidate(...args);
+    if (directCall && typeof directCall.call === "function") {
+      return directCall.call();
+    }
+    return directCall;
+  }
+
+  throw new Error(`TRON contract method ${fn} is not available on this contract instance.`);
 }
 
 function resolveTokenDecimalsFromConfig(network: NetworkKey, tokenAddress: string): number | undefined {
@@ -91,30 +113,26 @@ export async function prepareTokenTransfer(params: {
   }
 
   if (chain.kind === "tron") {
-    const tronWeb = getPublicClient(network) as any;
     if (tokenAddress) {
-      const contract = await tronWeb.contract().at(tokenAddress);
       let decimals = decimalsOverride;
       if (decimals == null) {
         try {
-          decimals = Number(await contract.methods.decimals().call());
+          decimals = Number(await readContract({ network, address: tokenAddress, abi: ERC20_ABI, functionName: "decimals" }));
         } catch {
           decimals = resolveTokenDecimalsFromConfig(network, tokenAddress);
         }
       }
-      if (decimals == null) {
+      if (decimals == null || !Number.isFinite(decimals)) {
         throw new Error(
           "Unable to detect token decimals from contract/config. Please retry with explicit decimals in prepare_token_transfer.",
         );
       }
       let symbol = "TOKEN";
       try {
-        symbol = String(await contract.methods.symbol().call());
-      } catch {
-        symbol = "TOKEN";
-      }
+        symbol = String(await readContract({ network, address: tokenAddress, abi: ERC20_ABI, functionName: "symbol" }));
+      } catch { /* keep default */ }
       const amountRaw = utils.parseUnits(amount, decimals).toString();
-      const balanceRaw = BigInt(await contract.methods.balanceOf(config.address).call()).toString();
+      const balanceRaw = BigInt((await readContract({ network, address: tokenAddress, abi: ERC20_ABI, functionName: "balanceOf", args: [config.address] })).toString()).toString();
       const balance = utils.formatUnits(BigInt(balanceRaw), decimals);
 
       if (BigInt(balanceRaw) < BigInt(amountRaw)) {
@@ -139,6 +157,7 @@ export async function prepareTokenTransfer(params: {
     const decimals = 6;
     const symbol = "TRX";
     const amountRaw = utils.parseUnits(amount, decimals).toString();
+    const tronWeb = getPublicClient(network) as any;
     const balanceRaw = BigInt(await tronWeb.trx.getBalance(config.address)).toString();
     const balance = utils.formatUnits(BigInt(balanceRaw), decimals);
 
@@ -323,10 +342,10 @@ export async function transferTRC20(
 
     // Check token balance before transfer
     const walletAddress = tronWeb.defaultAddress.base58 as string;
-    const balance = BigInt(await contract.methods.balanceOf(walletAddress).call());
+    const balance = BigInt(await readTronContractValue(contract, "balanceOf", [walletAddress]));
     if (balance < BigInt(amount)) {
-      const symbol = await contract.methods.symbol().call();
-      const decimals = Number(await contract.methods.decimals().call());
+      const symbol = await readTronContractValue(contract, "symbol");
+      const decimals = Number(await readTronContractValue(contract, "decimals"));
       const divisor = BigInt(10) ** BigInt(decimals);
       throw new Error(
         `Insufficient ${symbol} balance. Have ${(Number(balance) / Number(divisor)).toString()}, need ${(Number(BigInt(amount)) / Number(divisor)).toString()}`,
@@ -337,8 +356,8 @@ export async function transferTRC20(
       .methods.transfer(to, amount)
       .send();
 
-    const symbol = await contract.methods.symbol().call();
-    const decimals = await contract.methods.decimals().call();
+    const symbol = await readTronContractValue(contract, "symbol");
+    const decimals = await readTronContractValue(contract, "decimals");
 
     const decimalsNum = Number(decimals);
     const divisor = BigInt(10) ** BigInt(decimalsNum);

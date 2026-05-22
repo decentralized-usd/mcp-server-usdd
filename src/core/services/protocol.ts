@@ -1,4 +1,4 @@
-import { DOG_ABI, DSR_POT_ABI, OSM_ABI, PSM_ABI, SPOT_ABI, SUSDD_ABI, VAT_ABI } from "../abis.js";
+import { DOG_ABI, DSR_POT_ABI, ERC20_ABI, OSM_ABI, PSM_ABI, SPOT_ABI, SUSDD_ABI, VAT_ABI } from "../abis.js";
 import { getIlkConfig, getNetworkConfig, getSupportedIlks, getSupportedPsmMarkets, type NetworkKey } from "../chains.js";
 import { readContract } from "./contracts.js";
 import { getConfiguredWallet } from "./wallet.js";
@@ -133,6 +133,48 @@ export async function getPsmStatus(network: NetworkKey, market: string) {
     feeInPercent: Number(BigInt(tin.toString())) / 1e16,
     feeOutPercent: Number(BigInt(tout.toString())) / 1e16,
     ilk: utils.bytes32ToString(String(ilk)),
+  };
+}
+
+export async function getPsmMetrics(network: NetworkKey, market: string) {
+  const psm = getSupportedPsmMarkets(network).find((item) => item.key.toUpperCase() === market.toUpperCase() || item.label.toUpperCase() === market.toUpperCase());
+  if (!psm) throw new Error(`Unknown PSM market: ${market}`);
+
+  const config = getNetworkConfig(network);
+  const [sellEnabled, buyEnabled, tin, tout, gemSymbolRaw, usddSymbolRaw] = await Promise.all([
+    readContract({ network, address: psm.psm, abi: PSM_ABI, functionName: "sellEnabled" }),
+    readContract({ network, address: psm.psm, abi: PSM_ABI, functionName: "buyEnabled" }),
+    readContract({ network, address: psm.psm, abi: PSM_ABI, functionName: "tin" }),
+    readContract({ network, address: psm.psm, abi: PSM_ABI, functionName: "tout" }),
+    readContract({ network, address: psm.gem, abi: ERC20_ABI, functionName: "symbol" }).catch(() => psm.label.replace("PSM ", "")),
+    readContract({ network, address: config.usdd, abi: ERC20_ABI, functionName: "symbol" }).catch(() => "USDD"),
+  ]);
+
+  const gemSymbol = String(gemSymbolRaw);
+  const usddSymbol = String(usddSymbolRaw);
+  const feeInPercent = Number(BigInt(tin.toString())) / 1e16;
+  const feeOutPercent = Number(BigInt(tout.toString())) / 1e16;
+
+  return {
+    network,
+    market: psm.key,
+    address: psm.psm,
+    routes: [
+      {
+        fromToken: gemSymbol,
+        toToken: usddSymbol,
+        available: BigInt(sellEnabled.toString()) === 1n,
+        fee: `${feeInPercent}%`,
+        feePercent: feeInPercent,
+      },
+      {
+        fromToken: usddSymbol,
+        toToken: gemSymbol,
+        available: BigInt(buyEnabled.toString()) === 1n,
+        fee: `${feeOutPercent}%`,
+        feePercent: feeOutPercent,
+      },
+    ],
   };
 }
 

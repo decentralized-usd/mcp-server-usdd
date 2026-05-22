@@ -1,12 +1,12 @@
 {
-  "name": "mcp-server-usdd-test",
-  "version": "1.2.1",
+  "name": "@usdd/mcp-server-usdd",
+  "version": "1.0.3",
   "description": "MCP server for the USDD protocol across TRON, Ethereum, and BSC. Supports vaults, PSM swaps, USDD Savings, protocol monitoring, and AI-guided risk workflows.",
   "type": "module",
   "module": "src/index.ts",
   "main": "build/index.js",
   "bin": {
-    "mcp-server-usdd-test": "./bin/cli.js"
+    "mcp-server-usdd": "./bin/cli.js"
   },
   "files": [
     "build/",
@@ -26,24 +26,24 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@bankofai/agent-wallet": "^2.3.1",
-    "@modelcontextprotocol/sdk": "^1.22.0",
-    "@scure/bip32": "^2.0.1",
-    "@scure/bip39": "^2.0.1",
-    "cors": "^2.8.6",
-    "express": "^4.21.2",
+    "@bankofai/agent-wallet": "2.4.0",
+    "@modelcontextprotocol/sdk": "1.27.1",
+    "@scure/bip32": "2.0.1",
+    "@scure/bip39": "2.0.1",
+    "cors": "2.8.6",
+    "express": "5.2.1",
     "tronlink-signer": "0.1.4",
-    "tronweb": "^6.1.1",
-    "viem": "^2.37.5",
-    "zod": "^3.24.3"
+    "tronweb": "6.2.2",
+    "viem": "2.47.5",
+    "zod": "3.25.76"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.19.7",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.17"
+    "@types/cors": "2.8.19",
+    "@types/express": "5.0.6",
+    "@types/node": "22.19.13",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vitest": "4.0.18"
   },
   "engines": {
     "node": ">=20.0.0"

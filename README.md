@@ -36,8 +36,10 @@ Current implementation covers:
 - Node.js 20+
 - Optional but recommended:
   - `TRONGRID_API_KEY` for more reliable TRON access
+  - dedicated `TRON_FULL_NODE` and `TRON_NILE_FULL_NODE`
   - dedicated `ETH_RPC_URL`
   - dedicated `BSC_RPC_URL`
+  - dedicated `ETH_SEPOLIA_RPC_URL` and `BSC_TESTNET_RPC_URL`
 
 ## Developer
 
@@ -162,6 +164,8 @@ Add to .cursor/mcp.json:
 }
 ```
 
+For live RPC reads, the server also accepts `TRON_FULL_NODE`, `TRON_NILE_FULL_NODE`, `ETH_RPC_URL`, `ETH_SEPOLIA_RPC_URL`, `BSC_RPC_URL`, and `BSC_TESTNET_RPC_URL`. Use `get_protocol_addresses` when only deployment addresses are needed; it does not call RPC endpoints and is unaffected by public RPC rate limits.
+
 
 ## Tools
 
@@ -184,7 +188,8 @@ Add to .cursor/mcp.json:
 
 | Tool | Description | Write? |
 |---|---|---|
-| `get_protocol_overview` | Show configured protocol addresses, ilks, PSMs, and ceilings | No |
+| `get_protocol_addresses` | Show static deployment addresses, configured ilks, and PSM markets without RPC reads | No |
+| `get_protocol_overview` | Show live protocol ceilings and debt metrics alongside configured deployments | No |
 | `get_supported_ilks` | List configured collateral types and PSM joins | No |
 | `get_native_balance` | Read native balance (`TRX` / `ETH` / `BNB`) | No |
 | `get_token_balance` | Read ERC20/TRC20 balance | No |
@@ -348,7 +353,7 @@ mcp-server-usdd/
 - "Swap 5,000 USDD back to USDC on BSC" → AI calls `get_psm_status`, then executes `psm_swap_from_usdd` and reminds the user to re-check balances.
 
 **Token & Balances**
-- "What is my USDD balance on Tron?" → AI calls `get_protocol_overview` to identify the USDD token address, then calls `get_token_balance`.
+- "What is my USDD balance on Tron?" → AI calls `get_protocol_addresses` to identify the USDD token address without an RPC read, then calls `get_token_balance`.
 - "Do I have enough allowance for the USDT PSM?" → AI calls `check_allowance` with the token and PSM spender, then suggests `approve_token` only if needed.
 - "Send 100 USDD to TXxxx... on Tron" → AI calls `prepare_token_transfer` and displays the transfer preview (from, to, amount, balance). After the user confirms, AI calls `confirm_token_transfer` to execute.
 - "Transfer 0.5 ETH to 0xabc..." → AI calls `prepare_token_transfer` for native ETH, presents the details, then waits for user approval before executing.

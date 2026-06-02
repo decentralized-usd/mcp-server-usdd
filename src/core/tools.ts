@@ -255,6 +255,17 @@ export function registerUsddTools(server: McpServer) {
     }
   });
 
+  server.registerTool("get_protocol_addresses", {
+    description: "Get static protocol deployment addresses, configured ilks, and PSM markets without making RPC calls.",
+    inputSchema: { network: networkField },
+  }, async ({ network }) => {
+    try {
+      return asText(services.getProtocolAddresses(resolveNetwork(network as NetworkKey)));
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
   server.registerTool("get_protocol_overview", {
     description: "Get protocol addresses, ceilings, configured ilks, and PSM markets for USDD.",
     inputSchema: { network: networkField },

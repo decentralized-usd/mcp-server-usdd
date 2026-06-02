@@ -24,6 +24,7 @@ const servicesMock = vi.hoisted(() => {
     getGlobalNetworks: vi.fn(),
     getNetworkAlias: vi.fn(),
     getNetworkProfile: vi.fn(),
+    getProtocolAddresses: vi.fn(),
     getProtocolOverview: vi.fn(),
     getSupportedIlksData: vi.fn(),
     getOracleStatus: vi.fn(),
@@ -139,6 +140,7 @@ describe("registerUsddTools", () => {
       "list_wallets",
       "import_wallet",
       "set_active_wallet",
+      "get_protocol_addresses",
       "get_protocol_overview",
       "get_supported_ilks",
       "get_oracle_status",
@@ -284,8 +286,14 @@ describe("registerUsddTools", () => {
     expect(confirmationId).toBeTruthy();
     expect(prepared.json.transfer.amount).toBe("1");
 
+    await expect(runTool(server, "confirm_token_transfer", {
+      confirmationId,
+    })).rejects.toThrow(/confirm/);
+    expect(servicesMock.executeTokenTransfer).not.toHaveBeenCalled();
+
     const confirmed = await runTool(server, "confirm_token_transfer", {
       confirmationId,
+      confirm: true,
     });
     expect(servicesMock.executeTokenTransfer).toHaveBeenCalledTimes(1);
     expect(confirmed.json.status).toBe("success");
@@ -369,15 +377,19 @@ describe("registerUsddTools", () => {
 
   it("uses tron as the default network for wallet and protocol reads", async () => {
     servicesMock.getWalletAddress.mockReturnValue("TWallet");
+    servicesMock.getProtocolAddresses.mockReturnValue({ network: "tron" });
     servicesMock.getProtocolOverview.mockResolvedValue({ network: "tron" });
     const server = createServer();
 
     const wallet = await runTool(server, "get_wallet_address");
+    const addresses = await runTool(server, "get_protocol_addresses");
     const overview = await runTool(server, "get_protocol_overview");
 
     expect(servicesMock.getWalletAddress).toHaveBeenCalledWith("tron");
+    expect(servicesMock.getProtocolAddresses).toHaveBeenCalledWith("tron");
     expect(servicesMock.getProtocolOverview).toHaveBeenCalledWith("tron");
     expect(wallet.json.address).toBe("TWallet");
+    expect(addresses.json.network).toBe("tron");
     expect(overview.json.network).toBe("tron");
   });
 

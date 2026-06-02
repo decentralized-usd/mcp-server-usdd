@@ -301,7 +301,7 @@ export function getPsmMarketConfig(market: string, network: string = "tron"): Ps
   const config = getNetworkConfig(network);
   const found = Object.values(config.psmMarkets).find((item) => item.key.toUpperCase() === normalized || item.label.toUpperCase() === normalized);
   if (!found) {
-    throw new Error(`Unsupported PSM market: ${market}. Use get_protocol_overview or get_supported_ilks to inspect configured markets.`);
+    throw new Error(`Unsupported PSM market: ${market}. Use get_protocol_addresses or get_supported_ilks to inspect configured markets.`);
   }
   return found;
 }

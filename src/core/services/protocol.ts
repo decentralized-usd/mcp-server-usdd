@@ -82,6 +82,32 @@ export async function getProtocolOverview(network: NetworkKey) {
   };
 }
 
+export function getProtocolAddresses(network: NetworkKey) {
+  const config = getNetworkConfig(network);
+
+  return {
+    network,
+    kind: config.kind,
+    label: config.label,
+    addresses: {
+      proxyRegistry: config.proxyRegistry,
+      proxyActions: config.proxyActions,
+      proxyActionsProxy: config.proxyActionsProxy,
+      cdpManager: config.cdpManager,
+      vat: config.vat,
+      jug: config.jug,
+      dog: config.dog,
+      spot: config.spot,
+      usdd: config.usdd,
+      usddJoin: config.usddJoin,
+      multicall: config.multicall,
+      savings: config.savings,
+    },
+    ilks: getSupportedIlks(network),
+    psmMarkets: getSupportedPsmMarkets(network),
+  };
+}
+
 export async function getOracleStatus(network: NetworkKey, ilk: string) {
   const config = getNetworkConfig(network);
   const ilkConfig = getIlkConfig(ilk, network);

@@ -66,7 +66,7 @@ Always do these checks first:
 1. Call \`get_wallet_address\`.
 2. Call \`get_oracle_status\` for ${ilk}.
 3. If the collateral is ERC20/TRC20, call \`get_supported_ilks\`, find the gem token for ${ilk}, then call \`get_token_balance\` and \`check_allowance\`.
-4. If the action uses USDD repayment, call \`get_protocol_overview\` to get the USDD token address, then call \`get_token_balance\` and \`check_allowance\` for the USDD join or relevant spender.
+4. If the action uses USDD repayment, call \`get_protocol_addresses\` to get the USDD token address, then call \`get_token_balance\` and \`check_allowance\` for the USDD join or relevant spender.
 
 Action branch:
 - open_and_mint:
@@ -187,7 +187,7 @@ Ilk: ${ilk}
 Collateral to free: ${amountToFree}
 
 1. Call \`get_vault_summary\` and state the current debt.
-2. Call \`get_protocol_overview\` and identify the USDD token address.
+2. Call \`get_protocol_addresses\` and identify the USDD token address.
 3. Call \`get_token_balance\` for that USDD token.
 4. Call \`check_allowance\` for the USDD token against the relevant spender if repayment needs approval.
 5. If approval is insufficient, call \`approve_token\`.

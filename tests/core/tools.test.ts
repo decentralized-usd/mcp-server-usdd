@@ -25,6 +25,7 @@ const servicesMock = vi.hoisted(() => {
     getNetworkAlias: vi.fn(),
     getNetworkProfile: vi.fn(),
     getProtocolAddresses: vi.fn(),
+    getChainlogAddress: vi.fn(),
     getProtocolOverview: vi.fn(),
     getSupportedIlksData: vi.fn(),
     getOracleStatus: vi.fn(),
@@ -141,6 +142,7 @@ describe("registerUsddTools", () => {
       "import_wallet",
       "set_active_wallet",
       "get_protocol_addresses",
+      "get_chainlog_address",
       "get_protocol_overview",
       "get_supported_ilks",
       "get_oracle_status",
@@ -387,23 +389,28 @@ describe("registerUsddTools", () => {
 
   it("requires explicit network for wallet and protocol reads", async () => {
     servicesMock.getWalletAddress.mockReturnValue("TWallet");
-    servicesMock.getProtocolAddresses.mockReturnValue({ network: "tron" });
+    servicesMock.getProtocolAddresses.mockResolvedValue({ network: "tron" });
+    servicesMock.getChainlogAddress.mockResolvedValue({ network: "tron", key: "MCD_USDD", address: "TUsdd" });
     servicesMock.getProtocolOverview.mockResolvedValue({ network: "tron" });
     const server = createServer();
 
     await expect(runTool(server, "get_wallet_address")).rejects.toThrow(/network/i);
     await expect(runTool(server, "get_protocol_addresses")).rejects.toThrow(/network/i);
+    await expect(runTool(server, "get_chainlog_address", { key: "MCD_USDD" })).rejects.toThrow(/network/i);
     await expect(runTool(server, "get_protocol_overview")).rejects.toThrow(/network/i);
 
     const wallet = await runTool(server, "get_wallet_address", { network: "tron" });
     const addresses = await runTool(server, "get_protocol_addresses", { network: "tron" });
+    const chainlog = await runTool(server, "get_chainlog_address", { network: "tron", key: "MCD_USDD" });
     const overview = await runTool(server, "get_protocol_overview", { network: "tron" });
 
     expect(servicesMock.getWalletAddress).toHaveBeenCalledWith("tron");
-    expect(servicesMock.getProtocolAddresses).toHaveBeenCalledWith("tron");
+    expect(servicesMock.getProtocolAddresses).toHaveBeenCalledWith("tron", { refresh: undefined });
+    expect(servicesMock.getChainlogAddress).toHaveBeenCalledWith("tron", "MCD_USDD", { refresh: undefined });
     expect(servicesMock.getProtocolOverview).toHaveBeenCalledWith("tron");
     expect(wallet.json.address).toBe("TWallet");
     expect(addresses.json.network).toBe("tron");
+    expect(chainlog.json.address).toBe("TUsdd");
     expect(overview.json.network).toBe("tron");
   });
 
@@ -485,6 +492,9 @@ describe("registerUsddTools", () => {
     await expect(
       server.validateToolInput(server._registeredTools["get_protocol_addresses"] as never, {}),
     ).rejects.toThrow(/network/i);
+    await expect(
+      server.validateToolInput(server._registeredTools["get_chainlog_address"] as never, { network: "tron" }),
+    ).rejects.toThrow();
     await expect(
       server.validateToolInput(server._registeredTools["get_psm_status"] as never, { market: "PSM-USDT" }),
     ).rejects.toThrow(/network/i);

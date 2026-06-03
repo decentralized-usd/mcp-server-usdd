@@ -35,6 +35,7 @@ export interface NetworkConfig {
   explorer: string;
   nativeSymbol: string;
   serviceApiUrl: string;
+  chainlogAddress?: string;
   proxyRegistry: string;
   proxyActions: string;
   proxyActionsProxy?: string;
@@ -58,6 +59,12 @@ const tronNileRpc = process.env.TRON_NILE_FULL_NODE || "https://nile.trongrid.io
 const ethSepoliaRpc = process.env.ETH_SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
 const bscTestnetRpc = process.env.BSC_TESTNET_RPC_URL || "https://bsc-testnet-rpc.publicnode.com";
 const productionApiUrl = process.env.USDD_API_URL || "https://app-api.usdd.io";
+const ethChainlogAddress = process.env.ETH_CHAINLOG_ADDRESS || "0xe43b79ac7A8CA43365B6AD4757bc35C064249fA0";
+const ethSepoliaChainlogAddress = process.env.ETH_SEPOLIA_CHAINLOG_ADDRESS || "0x65fc825870B206c1effEAEEbF80a4CBc8585e93F";
+const tronChainlogAddress = process.env.TRON_CHAINLOG_ADDRESS || "TH2iieRStHtzDMTPXdFcgixQLBuhrtq6p9";
+const tronNileChainlogAddress = process.env.TRON_NILE_CHAINLOG_ADDRESS || "TRuw52wuVD61n1HB8b7V8d8sNPUfoUCj3w";
+const bscChainlogAddress = process.env.BSC_CHAINLOG_ADDRESS || "0x2007A37dC25c58Ae373dE3B0d9e9aE231a2F17Bd";
+const bscTestnetChainlogAddress = process.env.BSC_TESTNET_CHAINLOG_ADDRESS || "0x739a0a6185e8c49ef7591eceea47e9486eefb37f";
 
 export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
   tron: {
@@ -69,6 +76,7 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
     explorer: "https://tronscan.org",
     nativeSymbol: "TRX",
     serviceApiUrl: productionApiUrl,
+    chainlogAddress: tronChainlogAddress,
     proxyRegistry: "THuVWkvAikvSqmoZXHMUQJAcocsgFr4wuk",
     proxyActions: "TEk9usYZsunkc5oYijyMte6sGurspik2Js",
     proxyActionsProxy: "TXzhj9Xh8xfzerjinRyM5TfoBL7Cw5hk5d",
@@ -102,6 +110,7 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
     explorer: "https://etherscan.io",
     nativeSymbol: "ETH",
     serviceApiUrl: productionApiUrl,
+    chainlogAddress: ethChainlogAddress,
     proxyRegistry: "0x8be6b814beb37e8028258777af0ec6648a2a908e",
     proxyActions: "0xb80751ef88d07fa33ee4fc0c6f8b4b6c6c31e708",
     proxyActionsProxy: "0x3dba111255d3888c723242320595588754cf493e",
@@ -137,6 +146,7 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
     explorer: "https://bscscan.com",
     nativeSymbol: "BNB",
     serviceApiUrl: productionApiUrl,
+    chainlogAddress: bscChainlogAddress,
     proxyRegistry: "0x0144fcce201dc3957fcf75269c10c21cca41ba73",
     proxyActions: "0x777684f6425d095e9166f5f694f50e48a16bcb25",
     proxyActionsProxy: "0x2662e860ea672e4d31df3438114c48511229e60f",
@@ -172,6 +182,7 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
     explorer: "https://nile.tronscan.org",
     nativeSymbol: "TRX",
     serviceApiUrl: productionApiUrl,
+    chainlogAddress: tronNileChainlogAddress,
     proxyRegistry: "TFYXC7Sx2UfMmvNeuSpGv2Ss4e8skzkgCS",
     proxyActions: "TDAeZp2u3Z3aSXL9GTaqg3GQTG5oksNRJ4",
     cdpManager: "TLsfKsZ15SVMMfyyfvd2WXB1ZiexKavez2",
@@ -204,6 +215,7 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
     explorer: "https://sepolia.etherscan.io",
     nativeSymbol: "ETH",
     serviceApiUrl: productionApiUrl,
+    chainlogAddress: ethSepoliaChainlogAddress,
     proxyRegistry: "0x9334a91eb8a23bb45c5f42fec4e387d914dd7ef0",
     proxyActions: "0x8b60aa3b7948c9d056b5bdbb3a8ff31253a30b3b",
     cdpManager: "0xb6f757bffc522de20d8cc688bc0a59f27e02e13d",
@@ -239,6 +251,7 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
     explorer: "https://testnet.bscscan.com",
     nativeSymbol: "BNB",
     serviceApiUrl: productionApiUrl,
+    chainlogAddress: bscTestnetChainlogAddress,
     proxyRegistry: "0xfbbed7fa2bd12704d669bcee1a97b09accf1025e",
     proxyActions: "0xa611a3fcbf68dcd3b6b44c2868f66c42117f1a0e",
     cdpManager: "0xa94f77e6ff4aa8df842cf5234fe0bca102e243d4",

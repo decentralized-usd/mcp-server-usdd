@@ -1,4 +1,5 @@
 export * from "./balance.js";
+export * from "./chainlog.js";
 export * from "./clients.js";
 export * from "./contracts.js";
 export * from "./global.js";

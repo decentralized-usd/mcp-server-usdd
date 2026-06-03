@@ -273,11 +273,29 @@ export function registerUsddTools(server: McpServer) {
   });
 
   server.registerTool("get_protocol_addresses", {
-    description: "Get static protocol deployment addresses, configured ilks, and PSM markets without making RPC calls.",
-    inputSchema: { network: networkField },
-  }, async ({ network }) => {
+    description: "Get Chainlog-backed protocol addresses, configured ilks, and PSM markets. Uses cache when fresh and falls back to cache if live Chainlog reads fail.",
+    inputSchema: {
+      network: networkField,
+      refresh: z.boolean().optional().describe("Force a live Chainlog read instead of using a fresh cache entry."),
+    },
+  }, async ({ network, refresh }) => {
     try {
-      return asText(services.getProtocolAddresses(resolveNetwork(network as NetworkKey)));
+      return asText(await services.getProtocolAddresses(resolveNetwork(network as NetworkKey), { refresh }));
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_chainlog_address", {
+    description: "Resolve one USDD Chainlog key, such as MCD_USDD, MCD_JOIN_USDD, MCD_JOIN_ETH_A, or PROXY_ACTIONS.",
+    inputSchema: {
+      network: networkField,
+      key: z.string().min(1).describe("Chainlog key to resolve, e.g. MCD_USDD or MCD_JOIN_ETH_A"),
+      refresh: z.boolean().optional().describe("Force a live Chainlog read instead of using a fresh cache entry."),
+    },
+  }, async ({ network, key, refresh }) => {
+    try {
+      return asText(await services.getChainlogAddress(resolveNetwork(network as NetworkKey), key, { refresh }));
     } catch (error) {
       return asError(error);
     }

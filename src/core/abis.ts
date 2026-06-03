@@ -9,6 +9,13 @@ export const ERC20_ABI = [
   { type: "function", name: "transfer", inputs: [{ type: "address", name: "to" }, { type: "uint256", name: "amount" }], outputs: [{ type: "bool" }], stateMutability: "nonpayable" },
 ] as const;
 
+export const CHAINLOG_ABI = [
+  { type: "function", name: "getAddress", inputs: [{ type: "bytes32", name: "_key" }], outputs: [{ type: "address", name: "addr" }], stateMutability: "view" },
+  { type: "function", name: "count", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "get", inputs: [{ type: "uint256", name: "_index" }], outputs: [{ type: "bytes32" }, { type: "address" }], stateMutability: "view" },
+  { type: "function", name: "version", inputs: [], outputs: [{ type: "string" }], stateMutability: "view" },
+] as const;
+
 export const PROXY_REGISTRY_ABI = [
   { type: "function", name: "build", inputs: [], outputs: [{ type: "address", name: "proxy" }], stateMutability: "nonpayable" },
   { type: "function", name: "build", inputs: [{ type: "address", name: "owner" }], outputs: [{ type: "address", name: "proxy" }], stateMutability: "nonpayable" },

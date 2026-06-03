@@ -164,7 +164,7 @@ Add to .cursor/mcp.json:
 }
 ```
 
-For live RPC reads, the server also accepts `TRON_FULL_NODE`, `TRON_NILE_FULL_NODE`, `ETH_RPC_URL`, `ETH_SEPOLIA_RPC_URL`, `BSC_RPC_URL`, and `BSC_TESTNET_RPC_URL`. Use `get_protocol_addresses` when only deployment addresses are needed; it does not call RPC endpoints and is unaffected by public RPC rate limits.
+For live RPC reads, the server also accepts `TRON_FULL_NODE`, `TRON_NILE_FULL_NODE`, `ETH_RPC_URL`, `ETH_SEPOLIA_RPC_URL`, `BSC_RPC_URL`, and `BSC_TESTNET_RPC_URL`. Protocol address lookup is Chainlog-backed: `get_protocol_addresses` uses a local Chainlog cache when fresh, refreshes from the on-chain Chainlog when needed, and falls back to a complete cache if live RPC is rate-limited. Chainlog root defaults are included for all supported networks and can be overridden with `TRON_CHAINLOG_ADDRESS`, `TRON_NILE_CHAINLOG_ADDRESS`, `ETH_CHAINLOG_ADDRESS`, `ETH_SEPOLIA_CHAINLOG_ADDRESS`, `BSC_CHAINLOG_ADDRESS`, and `BSC_TESTNET_CHAINLOG_ADDRESS`.
 
 
 ## Tools
@@ -188,7 +188,8 @@ For live RPC reads, the server also accepts `TRON_FULL_NODE`, `TRON_NILE_FULL_NO
 
 | Tool | Description | Write? |
 |---|---|---|
-| `get_protocol_addresses` | Show static deployment addresses, configured ilks, and PSM markets without RPC reads | No |
+| `get_protocol_addresses` | Show Chainlog-backed protocol addresses, configured ilks, and PSM markets | No |
+| `get_chainlog_address` | Resolve one Chainlog key such as `MCD_USDD` or `MCD_JOIN_ETH_A` | No |
 | `get_protocol_overview` | Show live protocol ceilings and debt metrics alongside configured deployments | No |
 | `get_supported_ilks` | List configured collateral types and PSM joins | No |
 | `get_native_balance` | Read native balance (`TRX` / `ETH` / `BNB`) | No |
@@ -353,7 +354,7 @@ mcp-server-usdd/
 - "Swap 5,000 USDD back to USDC on BSC" → AI calls `get_psm_status`, then executes `psm_swap_from_usdd` and reminds the user to re-check balances.
 
 **Token & Balances**
-- "What is my USDD balance on Tron?" → AI calls `get_protocol_addresses` to identify the USDD token address without an RPC read, then calls `get_token_balance`.
+- "What is my USDD balance on Tron?" → AI calls `get_protocol_addresses` to identify the USDD token address from Chainlog/cache, then calls `get_token_balance`.
 - "Do I have enough allowance for the USDT PSM?" → AI calls `check_allowance` with the token and PSM spender, then suggests `approve_token` only if needed.
 - "Send 100 USDD to TXxxx... on Tron" → AI calls `prepare_token_transfer` and displays the transfer preview (from, to, amount, balance). After the user confirms, AI calls `confirm_token_transfer` to execute.
 - "Transfer 0.5 ETH to 0xabc..." → AI calls `prepare_token_transfer` for native ETH, presents the details, then waits for user approval before executing.

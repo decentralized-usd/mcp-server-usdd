@@ -180,7 +180,17 @@ describe("registerUsddTools", () => {
     const result = await runTool(server, "get_supported_networks");
     expect(result.json).toEqual({
       networks: ["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"],
-      default: "tron",
+      defaults: {
+        tron: "tron",
+        eth: "eth",
+        bsc: "bsc",
+      },
+      defaultAliases: {
+        tron: "mainnet",
+        eth: "eth",
+        bsc: "bsc",
+      },
+      note: "Chain-dependent tools require an explicit network argument. Do not use these defaults as an implicit network for user requests.",
     });
   });
 
@@ -375,15 +385,19 @@ describe("registerUsddTools", () => {
     expect(getNetwork.json.defaults.tron).toBe("tron_nile");
   });
 
-  it("uses tron as the default network for wallet and protocol reads", async () => {
+  it("requires explicit network for wallet and protocol reads", async () => {
     servicesMock.getWalletAddress.mockReturnValue("TWallet");
     servicesMock.getProtocolAddresses.mockReturnValue({ network: "tron" });
     servicesMock.getProtocolOverview.mockResolvedValue({ network: "tron" });
     const server = createServer();
 
-    const wallet = await runTool(server, "get_wallet_address");
-    const addresses = await runTool(server, "get_protocol_addresses");
-    const overview = await runTool(server, "get_protocol_overview");
+    await expect(runTool(server, "get_wallet_address")).rejects.toThrow(/network/i);
+    await expect(runTool(server, "get_protocol_addresses")).rejects.toThrow(/network/i);
+    await expect(runTool(server, "get_protocol_overview")).rejects.toThrow(/network/i);
+
+    const wallet = await runTool(server, "get_wallet_address", { network: "tron" });
+    const addresses = await runTool(server, "get_protocol_addresses", { network: "tron" });
+    const overview = await runTool(server, "get_protocol_overview", { network: "tron" });
 
     expect(servicesMock.getWalletAddress).toHaveBeenCalledWith("tron");
     expect(servicesMock.getProtocolAddresses).toHaveBeenCalledWith("tron");
@@ -402,7 +416,7 @@ describe("registerUsddTools", () => {
     });
     servicesMock.getWalletAddress.mockReturnValue("TWallet");
     const server = createServer();
-    const wallet = await runTool(server, "get_wallet_address");
+    const wallet = await runTool(server, "get_wallet_address", { network: "tron" });
 
     expect(wallet.json.walletMode).toBe("agent");
     expect(wallet.json.address).toBe("TWallet");
@@ -465,6 +479,18 @@ describe("registerUsddTools", () => {
 
   it("validates required tool inputs", async () => {
     const server = createServer();
+    await expect(
+      server.validateToolInput(server._registeredTools["get_wallet_address"] as never, {}),
+    ).rejects.toThrow(/network/i);
+    await expect(
+      server.validateToolInput(server._registeredTools["get_protocol_addresses"] as never, {}),
+    ).rejects.toThrow(/network/i);
+    await expect(
+      server.validateToolInput(server._registeredTools["get_psm_status"] as never, { market: "PSM-USDT" }),
+    ).rejects.toThrow(/network/i);
+    await expect(
+      server.validateToolInput(server._registeredTools["psm_swap_to_usdd"] as never, { market: "PSM-USDT", amount: "500" }),
+    ).rejects.toThrow(/network/i);
     await expect(
       server.validateToolInput(server._registeredTools["get_oracle_status"] as never, { network: "tron" }),
     ).rejects.toThrow();

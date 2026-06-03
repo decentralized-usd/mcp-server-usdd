@@ -317,7 +317,7 @@ mcp-server-usdd/
 ## Notes
 
 - Vault writes assume the configured wallet can sign on the target chain.
-- All tools default to the family-specific defaults set by `set_network`; if `network` is omitted, tron-family default is used unless the tool call explicitly passes `network`.
+- Chain-dependent tools require an explicit `network` argument. If the user has not named a chain, ask which network to use before calling any chain-dependent tool; do not infer TRON or use `set_network` defaults as an implicit choice.
 - ERC20/TRC20 flows often require `approve_token` first.
 - Browser mode now supports real transaction signing on TRON networks (`tron`, `tron_nile`) via `tronlink-signer` (TronLink/TIP-6963 flow). EVM networks currently continue to use agent-wallet signing.
 - `deposit_and_mint` is idempotent with respect to vault creation: it checks for an existing vault for the given ilk before opening a new one. If no vault exists, it submits two separate transactions — `open` then `lockGemAndDraw` — to avoid combined-tx reliability issues on TRON.

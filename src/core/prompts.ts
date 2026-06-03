@@ -1,9 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { getGlobalNetwork } from "./services/global.js";
 
-const promptNetworkField = z.enum(["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"]).optional();
-const defaultPromptNetwork = () => getGlobalNetwork();
+const promptNetworkField = z.enum(["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"]);
 
 export function registerUsddPrompts(server: McpServer) {
   server.registerPrompt("open_usdd_vault", {
@@ -14,7 +12,7 @@ export function registerUsddPrompts(server: McpServer) {
       collateralAmount: z.string(),
       drawAmount: z.string(),
     },
-  }, ({ network = defaultPromptNetwork(), ilk, collateralAmount, drawAmount }) => ({
+  }, ({ network, ilk, collateralAmount, drawAmount }) => ({
     messages: [{
       role: "user",
       content: {
@@ -50,7 +48,7 @@ Stop if the resulting health factor is near liquidation.`,
       repayAmount: z.string().optional(),
       withdrawAmount: z.string().optional(),
     },
-  }, ({ network = defaultPromptNetwork(), ilk, cdpId, action, collateralAmount, drawAmount, repayAmount, withdrawAmount }) => ({
+  }, ({ network, ilk, cdpId, action, collateralAmount, drawAmount, repayAmount, withdrawAmount }) => ({
     messages: [{
       role: "user",
       content: {
@@ -96,7 +94,7 @@ After any state-changing step:
       direction: z.enum(["to_usdd", "from_usdd"]),
       amount: z.string(),
     },
-  }, ({ network = defaultPromptNetwork(), market, direction, amount }) => ({
+  }, ({ network, market, direction, amount }) => ({
     messages: [{
       role: "user",
       content: {
@@ -123,7 +121,7 @@ Amount: ${amount}
       action: z.enum(["deposit", "withdraw", "inspect"]),
       amount: z.string().optional(),
     },
-  }, ({ network = defaultPromptNetwork(), action, amount }) => ({
+  }, ({ network, action, amount }) => ({
     messages: [{
       role: "user",
       content: {
@@ -148,7 +146,7 @@ Amount: ${amount || ""}
       network: promptNetworkField,
       cdpId: z.string(),
     },
-  }, ({ network = defaultPromptNetwork(), cdpId }) => ({
+  }, ({ network, cdpId }) => ({
     messages: [{
       role: "user",
       content: {
@@ -174,7 +172,7 @@ Vault id: ${cdpId}
       ilk: z.string(),
       amountToFree: z.string(),
     },
-  }, ({ network = defaultPromptNetwork(), cdpId, ilk, amountToFree }) => ({
+  }, ({ network, cdpId, ilk, amountToFree }) => ({
     messages: [{
       role: "user",
       content: {

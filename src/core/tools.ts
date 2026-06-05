@@ -20,7 +20,7 @@ function asError(error: unknown) {
   return { content: [{ type: "text" as const, text: `Error: ${message}` }], isError: true as const };
 }
 
-const networkField = z.enum(["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"]).optional().describe("Target network. Default: tron");
+const networkField = z.enum(["tron", "eth", "bsc", "tron_nile", "eth_sepolia", "bsc_testnet"]).describe("Target network. Required for every chain-dependent call. Ask the user to choose a network if it is missing.");
 const networkFamilyField = z.enum(["tron", "eth", "bsc"]).optional().describe("Network family. Use with aliases like mainnet.");
 const walletTypeField = z.enum(["tron", "evm"]).describe("Wallet family: tron or evm");
 const secretTypeField = z.enum(["private_key", "mnemonic"]).describe("Secret type to import");
@@ -28,12 +28,29 @@ const walletModeField = z.enum(["browser", "agent"]).describe("Wallet signing mo
 const pendingTransfers = new Map<string, PendingTransfer>();
 
 export function registerUsddTools(server: McpServer) {
-  const resolveNetwork = (network?: NetworkKey): NetworkKey => network || services.getGlobalNetwork();
+  const resolveNetwork = (network?: NetworkKey): NetworkKey => {
+    if (!network) {
+      throw new Error("Network is required for this tool. Ask the user to choose tron, eth, bsc, tron_nile, eth_sepolia, or bsc_testnet before calling it.");
+    }
+    return network;
+  };
 
   server.registerTool("get_supported_networks", {
     description: "List supported USDD networks.",
     inputSchema: {},
-  }, async () => asText({ networks: getSupportedNetworks(), default: services.getGlobalNetwork() }));
+  }, async () => {
+    const defaults = services.getGlobalNetworks();
+    return asText({
+      networks: getSupportedNetworks(),
+      defaults,
+      defaultAliases: {
+        tron: services.getNetworkAlias(defaults.tron),
+        eth: services.getNetworkAlias(defaults.eth),
+        bsc: services.getNetworkAlias(defaults.bsc),
+      },
+      note: "Chain-dependent tools require an explicit network argument. Do not use these defaults as an implicit network for user requests.",
+    });
+  });
 
   server.registerTool("get_protocol_metrics", {
     description: "Get aggregated protocol metrics from website data (mainnet).",
@@ -250,6 +267,35 @@ export function registerUsddTools(server: McpServer) {
   }, async ({ walletId, walletType }) => {
     try {
       return asText(await services.setActiveWallet(walletId, walletType));
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_protocol_addresses", {
+    description: "Get Chainlog-backed protocol addresses, configured ilks, and PSM markets. Uses cache when fresh and falls back to cache if live Chainlog reads fail.",
+    inputSchema: {
+      network: networkField,
+      refresh: z.boolean().optional().describe("Force a live Chainlog read instead of using a fresh cache entry."),
+    },
+  }, async ({ network, refresh }) => {
+    try {
+      return asText(await services.getProtocolAddresses(resolveNetwork(network as NetworkKey), { refresh }));
+    } catch (error) {
+      return asError(error);
+    }
+  });
+
+  server.registerTool("get_chainlog_address", {
+    description: "Resolve one USDD Chainlog key, such as MCD_USDD, MCD_JOIN_USDD, MCD_JOIN_ETH_A, or PROXY_ACTIONS.",
+    inputSchema: {
+      network: networkField,
+      key: z.string().min(1).describe("Chainlog key to resolve, e.g. MCD_USDD or MCD_JOIN_ETH_A"),
+      refresh: z.boolean().optional().describe("Force a live Chainlog read instead of using a fresh cache entry."),
+    },
+  }, async ({ network, key, refresh }) => {
+    try {
+      return asText(await services.getChainlogAddress(resolveNetwork(network as NetworkKey), key, { refresh }));
     } catch (error) {
       return asError(error);
     }

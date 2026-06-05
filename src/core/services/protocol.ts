@@ -1,5 +1,6 @@
 import { DOG_ABI, DSR_POT_ABI, ERC20_ABI, OSM_ABI, PSM_ABI, SPOT_ABI, SUSDD_ABI, VAT_ABI } from "../abis.js";
 import { getIlkConfig, getNetworkConfig, getSupportedIlks, getSupportedPsmMarkets, type NetworkKey } from "../chains.js";
+import { getChainlogAddresses } from "./chainlog.js";
 import { readContract } from "./contracts.js";
 import { getConfiguredWallet } from "./wallet.js";
 import { utils } from "./utils.js";
@@ -79,6 +80,136 @@ export async function getProtocolOverview(network: NetworkKey) {
     },
     ilks: ilksWithDust,
     psmMarkets: getSupportedPsmMarkets(network),
+  };
+}
+
+const CORE_CHAINLOG_KEYS = {
+  proxyRegistry: "PROXY_REGISTRY",
+  proxyActions: "PROXY_ACTIONS",
+  proxyActionsProxy: "GOV_ACTIONS_PROXY",
+  cdpManager: "CDP_MANAGER",
+  vat: "MCD_VAT",
+  jug: "MCD_JUG",
+  dog: "MCD_DOG",
+  spot: "MCD_SPOT",
+  usdd: "MCD_USDD",
+  usddJoin: "MCD_JOIN_USDD",
+  multicall: "MULTICALL",
+  susdd: "SUSDD",
+  pot: "MCD_POT",
+} as const;
+
+function ilkJoinKey(ilk: string) {
+  return `MCD_JOIN_${ilk.replace(/-/g, "_")}`;
+}
+
+function assetKeyFromIlk(ilk: string) {
+  const asset = ilk.split("-")[0]?.toUpperCase() || ilk.toUpperCase();
+  if (asset === "TRX") return "WTRX";
+  if (asset === "ETH") return "WETH";
+  if (asset === "BNB") return "WBNB";
+  return asset;
+}
+
+function psmAsset(market: string) {
+  return market.toUpperCase().replace(/^PSM-/, "");
+}
+
+function psmSuffix(market: string) {
+  return `${psmAsset(market)}_A`;
+}
+
+function psmJoinKey(market: string) {
+  return `MCD_JOIN_PSM_${psmSuffix(market)}`;
+}
+
+function psmAddressKey(market: string) {
+  return `MCD_PSM_${psmSuffix(market)}`;
+}
+
+function protocolAddressKeys(network: NetworkKey) {
+  const keys = new Set<string>(Object.values(CORE_CHAINLOG_KEYS));
+  for (const ilk of getSupportedIlks(network)) {
+    keys.add(ilkJoinKey(ilk.key));
+    keys.add(assetKeyFromIlk(ilk.key));
+  }
+  for (const market of getSupportedPsmMarkets(network)) {
+    keys.add(psmJoinKey(market.key));
+    keys.add(psmAddressKey(market.key));
+    keys.add(psmAsset(market.key));
+  }
+  return Array.from(keys);
+}
+
+function value(addresses: Record<string, string>, key: string) {
+  return addresses[key];
+}
+
+function addressMap(addresses: Record<string, string>) {
+  const savings = value(addresses, CORE_CHAINLOG_KEYS.susdd) || value(addresses, CORE_CHAINLOG_KEYS.pot)
+    ? {
+        susdd: value(addresses, CORE_CHAINLOG_KEYS.susdd),
+        pot: value(addresses, CORE_CHAINLOG_KEYS.pot),
+      }
+    : undefined;
+
+  return {
+    proxyRegistry: value(addresses, CORE_CHAINLOG_KEYS.proxyRegistry),
+    proxyActions: value(addresses, CORE_CHAINLOG_KEYS.proxyActions),
+    proxyActionsProxy: value(addresses, CORE_CHAINLOG_KEYS.proxyActionsProxy),
+    cdpManager: value(addresses, CORE_CHAINLOG_KEYS.cdpManager),
+    vat: value(addresses, CORE_CHAINLOG_KEYS.vat),
+    jug: value(addresses, CORE_CHAINLOG_KEYS.jug),
+    dog: value(addresses, CORE_CHAINLOG_KEYS.dog),
+    spot: value(addresses, CORE_CHAINLOG_KEYS.spot),
+    usdd: value(addresses, CORE_CHAINLOG_KEYS.usdd),
+    usddJoin: value(addresses, CORE_CHAINLOG_KEYS.usddJoin),
+    multicall: value(addresses, CORE_CHAINLOG_KEYS.multicall),
+    savings,
+  };
+}
+
+export async function getProtocolAddresses(network: NetworkKey, options: { refresh?: boolean } = {}) {
+  const config = getNetworkConfig(network);
+  const snapshot = await getChainlogAddresses(network, protocolAddressKeys(network), options);
+  const addresses = snapshot.addresses;
+
+  return {
+    network,
+    kind: config.kind,
+    label: config.label,
+    addressSource: {
+      type: snapshot.source,
+      logAddress: snapshot.logAddress,
+      cached: snapshot.cached,
+      stale: snapshot.stale,
+      lastVerifiedAt: snapshot.lastVerifiedAt,
+      cacheExpiresAt: snapshot.cacheExpiresAt,
+      version: snapshot.version,
+      warning: snapshot.warning,
+      missingKeys: snapshot.missingKeys,
+    },
+    addresses: addressMap(addresses),
+    ilks: getSupportedIlks(network).map((ilk) => ({
+      ...ilk,
+      join: value(addresses, ilkJoinKey(ilk.key)),
+      gem: value(addresses, assetKeyFromIlk(ilk.key)),
+      chainlogKeys: {
+        join: ilkJoinKey(ilk.key),
+        gem: assetKeyFromIlk(ilk.key),
+      },
+    })),
+    psmMarkets: getSupportedPsmMarkets(network).map((market) => ({
+      ...market,
+      psm: value(addresses, psmAddressKey(market.key)),
+      gemJoin: value(addresses, psmJoinKey(market.key)),
+      gem: value(addresses, psmAsset(market.key)),
+      chainlogKeys: {
+        psm: psmAddressKey(market.key),
+        gemJoin: psmJoinKey(market.key),
+        gem: psmAsset(market.key),
+      },
+    })),
   };
 }
 

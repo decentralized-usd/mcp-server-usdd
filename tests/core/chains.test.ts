@@ -76,4 +76,13 @@ describe("chains", () => {
     expect(NETWORKS.eth.savings).toBeDefined();
     expect(NETWORKS.bsc.savings).toBeDefined();
   });
+
+  it("configures Chainlog roots for all supported networks", () => {
+    expect(NETWORKS.tron.chainlogAddress).toBe("TH2iieRStHtzDMTPXdFcgixQLBuhrtq6p9");
+    expect(NETWORKS.eth.chainlogAddress).toBe("0xe43b79ac7A8CA43365B6AD4757bc35C064249fA0");
+    expect(NETWORKS.bsc.chainlogAddress).toBe("0x2007A37dC25c58Ae373dE3B0d9e9aE231a2F17Bd");
+    expect(NETWORKS.tron_nile.chainlogAddress).toBe("TRuw52wuVD61n1HB8b7V8d8sNPUfoUCj3w");
+    expect(NETWORKS.eth_sepolia.chainlogAddress).toBe("0x65fc825870B206c1effEAEEbF80a4CBc8585e93F");
+    expect(NETWORKS.bsc_testnet.chainlogAddress).toBe("0x739a0a6185e8c49ef7591eceea47e9486eefb37f");
+  });
 });

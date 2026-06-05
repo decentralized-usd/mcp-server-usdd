@@ -36,8 +36,10 @@ Current implementation covers:
 - Node.js 20+
 - Optional but recommended:
   - `TRONGRID_API_KEY` for more reliable TRON access
+  - dedicated `TRON_FULL_NODE` and `TRON_NILE_FULL_NODE`
   - dedicated `ETH_RPC_URL`
   - dedicated `BSC_RPC_URL`
+  - dedicated `ETH_SEPOLIA_RPC_URL` and `BSC_TESTNET_RPC_URL`
 
 ## Developer
 
@@ -162,6 +164,8 @@ Add to .cursor/mcp.json:
 }
 ```
 
+For live RPC reads, the server also accepts `TRON_FULL_NODE`, `TRON_NILE_FULL_NODE`, `ETH_RPC_URL`, `ETH_SEPOLIA_RPC_URL`, `BSC_RPC_URL`, and `BSC_TESTNET_RPC_URL`. Protocol address lookup is Chainlog-backed: `get_protocol_addresses` uses a local Chainlog cache when fresh, refreshes from the on-chain Chainlog when needed, and falls back to a complete cache if live RPC is rate-limited. Chainlog root defaults are included for all supported networks and can be overridden with `TRON_CHAINLOG_ADDRESS`, `TRON_NILE_CHAINLOG_ADDRESS`, `ETH_CHAINLOG_ADDRESS`, `ETH_SEPOLIA_CHAINLOG_ADDRESS`, `BSC_CHAINLOG_ADDRESS`, and `BSC_TESTNET_CHAINLOG_ADDRESS`.
+
 
 ## Tools
 
@@ -184,7 +188,9 @@ Add to .cursor/mcp.json:
 
 | Tool | Description | Write? |
 |---|---|---|
-| `get_protocol_overview` | Show configured protocol addresses, ilks, PSMs, and ceilings | No |
+| `get_protocol_addresses` | Show Chainlog-backed protocol addresses, configured ilks, and PSM markets | No |
+| `get_chainlog_address` | Resolve one Chainlog key such as `MCD_USDD` or `MCD_JOIN_ETH_A` | No |
+| `get_protocol_overview` | Show live protocol ceilings and debt metrics alongside configured deployments | No |
 | `get_supported_ilks` | List configured collateral types and PSM joins | No |
 | `get_native_balance` | Read native balance (`TRX` / `ETH` / `BNB`) | No |
 | `get_token_balance` | Read ERC20/TRC20 balance | No |
@@ -312,7 +318,7 @@ mcp-server-usdd/
 ## Notes
 
 - Vault writes assume the configured wallet can sign on the target chain.
-- All tools default to the family-specific defaults set by `set_network`; if `network` is omitted, tron-family default is used unless the tool call explicitly passes `network`.
+- Chain-dependent tools require an explicit `network` argument. If the user has not named a chain, ask which network to use before calling any chain-dependent tool; do not infer TRON or use `set_network` defaults as an implicit choice.
 - ERC20/TRC20 flows often require `approve_token` first.
 - Browser mode now supports real transaction signing on TRON networks (`tron`, `tron_nile`) via `tronlink-signer` (TronLink/TIP-6963 flow). EVM networks currently continue to use agent-wallet signing.
 - `deposit_and_mint` is idempotent with respect to vault creation: it checks for an existing vault for the given ilk before opening a new one. If no vault exists, it submits two separate transactions — `open` then `lockGemAndDraw` — to avoid combined-tx reliability issues on TRON.
@@ -348,7 +354,7 @@ mcp-server-usdd/
 - "Swap 5,000 USDD back to USDC on BSC" → AI calls `get_psm_status`, then executes `psm_swap_from_usdd` and reminds the user to re-check balances.
 
 **Token & Balances**
-- "What is my USDD balance on Tron?" → AI calls `get_protocol_overview` to identify the USDD token address, then calls `get_token_balance`.
+- "What is my USDD balance on Tron?" → AI calls `get_protocol_addresses` to identify the USDD token address from Chainlog/cache, then calls `get_token_balance`.
 - "Do I have enough allowance for the USDT PSM?" → AI calls `check_allowance` with the token and PSM spender, then suggests `approve_token` only if needed.
 - "Send 100 USDD to TXxxx... on Tron" → AI calls `prepare_token_transfer` and displays the transfer preview (from, to, amount, balance). After the user confirms, AI calls `confirm_token_transfer` to execute.
 - "Transfer 0.5 ETH to 0xabc..." → AI calls `prepare_token_transfer` for native ETH, presents the details, then waits for user approval before executing.

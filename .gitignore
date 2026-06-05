@@ -1,5 +1,6 @@
 .history
 .vscode
+.idea
 build
 # Logs
 logs

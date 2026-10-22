@@ -1,3 +1,4 @@
+import "../../scripts/check-node-version.mjs";
 import express from "express";
 import cors from "cors";
 

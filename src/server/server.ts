@@ -1,3 +1,4 @@
+import "../../scripts/check-node-version.mjs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerUsddResources } from "../core/resources.js";
 import { registerUsddTools } from "../core/tools.js";

@@ -11,10 +11,19 @@
   "files": [
     "build/",
     "bin/",
+    "scripts/",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
+    "check:node": "node scripts/check-node-version.mjs",
+    "preinstall": "npm run check:node",
+    "prebuild": "npm run check:node",
+    "pretest": "npm run check:node",
+    "prestart": "npm run check:node",
+    "prestart:http": "npm run check:node",
+    "predev": "npm run check:node",
+    "predev:http": "npm run check:node",
     "start": "tsx src/index.ts",
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
@@ -46,7 +55,7 @@
     "vitest": "4.0.18"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "24.22.1"
   },
   "keywords": [
     "mcp",

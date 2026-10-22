@@ -1,3 +1,4 @@
+import "../scripts/check-node-version.mjs";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import startServer from "./server/server.js";
 

@@ -33,7 +33,9 @@ Current implementation covers:
 
 ## Prerequisites
 
-- Node.js 20+
+- A patched Node.js release: `22.23.4+` on Node 22, `24.22.1+` on Node 24, or `26.12.1+` on Node 26
+  - Node.js `24.22.1` LTS is the recommended development and deployment runtime (`nvm use` reads the repository's `.nvmrc`)
+  - Node.js 20 and versions below those patch levels are rejected because they do not contain the 2026-10-21 security fixes
 - Optional but recommended:
   - `TRONGRID_API_KEY` for more reliable TRON access
   - dedicated `TRON_FULL_NODE` and `TRON_NILE_FULL_NODE`
@@ -48,7 +50,9 @@ Current implementation covers:
 ```bash
 git clone https://github.com/decentralized-usd/mcp-server-usdd
 cd mcp-server-usdd
-npm install
+nvm install
+nvm use
+npm ci
 ```
 
 ### Usage

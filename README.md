@@ -383,3 +383,7 @@ mcp-server-usdd/
 ## License
 
 MIT License Copyright (c) 2026 USDD
+
+## Agent 开发入口
+
+共享研发约束见 [AGENTS.md](AGENTS.md)，Claude 通过 [CLAUDE.md](CLAUDE.md) 引用同一份规则。按项目真实命令验证，明确需求直接推进，文档只保留实施和评审所需信息。
